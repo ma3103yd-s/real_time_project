@@ -3,6 +3,7 @@ pub struct PID{
     v: f64, 
     ynew: f64, 
     yold: f64,
+    eold: f64,
     e: f64,
     D: f64,
     I: f64,
@@ -14,7 +15,7 @@ impl PID{
     fn calculateOutput(&mut self, y: f64, yref: f64) -> f64{
         self.ynew = y;
         self.e = yref - y;
-        self.D = self.ad*self.D - self.bd*(y - self.yold);
+        self.D = self.ad*self.D + self.bd*(self.e - self.eold);
         self.v = self.p.K*(self.p.Beta*yref - y) + self.I + self.D;     
         return self.v;
     }
@@ -26,7 +27,7 @@ impl PID{
         } else {
             self.I = 0;
         }
-        self.yold = self.ynew;
+        self.eold = self.e;
     }
 
     fn getHMillis() -> f64{
@@ -34,7 +35,7 @@ impl PID{
     }
 
     fn setParameters() {
-        p = (PIDParameters) newParameters.clone();
+        p = newParameters.clone();
         if (!p.integratorOn) {
             I = 0;
         }
