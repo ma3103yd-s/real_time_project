@@ -5,6 +5,7 @@ pub struct PID{
     v: f64, 
     ynew: f64, 
     yold: f64,
+    eold: f64,
     e: f64,
     D: f64,
     I: f64,
@@ -21,6 +22,7 @@ impl PID{
             D: 0,
             v: 0,
             e: 0,
+            eold: 0,
             ynew: 0,
             yold: 0,
             ad: 0,
@@ -46,7 +48,7 @@ impl PID{
         } else {
             self.I = 0;
         }
-        self.yold = self.ynew;
+        self.eold = self.e;
     }
 
     pub fn getHMillis() -> f64{
