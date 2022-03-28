@@ -15,8 +15,8 @@ impl ModeMonitor {
     }
 
     pub fn setMode(&mut self, Mode newMode){
-        let mut = self.mode.lock().unwrap();
-        *mut = newMode;
+        let mut muter = self.mode.lock().unwrap();
+        *muter = newMode;
     }
 
     pub fn getMode(&mut self)->Mode{
