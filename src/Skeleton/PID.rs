@@ -18,22 +18,22 @@ impl PID{
     //TODO: Implement a PID controller with methods to calculate the output
     //and update the state
     pub fn new() -> Self {
-        
+        unimplemented;
     }
-
+    
     pub fn calculateOutput(&mut self, y: f64, yref: f64) -> f64{
-        
+        unimplemented;
     }
 
     pub fn updateState(&mut self, u: f64){
-        
+        unimplemented;
     }
 
     pub fn getHMillis() -> f64{
-       
+        unimplemented;
     }
 
     pub fn setParameters() {
-       
+        unimplemented;
     }
 }

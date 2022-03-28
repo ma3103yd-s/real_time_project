@@ -4,13 +4,16 @@ pub struct Regul {
     refGen: referenceGenerator,
     uMin: f64,
     uMax: f64,
-    analogInPosition: AnalogSource,
-    analogInAngle: AnalogSource,
-    analogOut: AnalogSink,
-    analogRef: AnalogSink,
+    analog: Analog,
+    digital: Digital
 }
 impl Regul {
     //TODO: Implement the Regul-thread that reads and writes to the I/O-channels
     fn run() {
+        unimplemented;
+    }
+    //TODO: Implement 
+    fn limit() {
+        unimplemented;
     }
 }
