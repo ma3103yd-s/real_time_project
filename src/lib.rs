@@ -5,44 +5,25 @@
 #![allow(unsafe_code)]
 #![allow(deref_nullptr)]
 
-
-
 include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
+pub mod iobox;
 
-use std::ptr;
 
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use iobox::AnalogType;
+    use iobox::ComediDevice;
+    
     #[test]
-    fn comedi_test()  {
-        unsafe  {
-            let subdev: u32 = 0;
-            let chan: u32  = 0;
-            let range: u32 = 0;
-            let data: *mut lsampl_t = ptr::null_mut() as *mut lsampl_t;
-            
-            let aref: u32 = AREF_GROUND;
-            let mut retval:i32 = 0;
+    fn test_analog() {
+        let it = ComediDevice::init_device().expect("Failed to init device");
+        let dev = ComediDevice::new(0, 30000, AREF_GROUND, it);
+        let analog_read = iobox::AnalogChannel::new(AnalogType::AnalogIn(1), dev);
+        let result = analog_read.read().expect("Failed to read data");
 
-            let it: Option<&mut comedi_t> = comedi_open("/dev/comedi0".as_ptr() as *mut i8).as_mut();
-
-            let it: &mut comedi_t = it.expect("Unable to open device");
-            
-            retval = comedi_data_read(it, subdev, chan, range, aref, data);
-
-            if retval < 0 {
-                panic!("Unable to read data");
-                
-            }
-
-            println!("{}", *data);
-            assert!(true);
-
-
-        }
-        
+        assert!(true);
         
     }
 }

@@ -1,72 +1,111 @@
-#[macro_use]
-extern crate lazy_static;
 
-use std::io::{Result, ErrorKind};
-use std::ptr;
+use std::{ptr, cell::RefCell, rc::Rc};
 // TODO: 
 // Define constants relating to subdev, ports, etc of the ioboc
+use crate::*;
+use std::sync::Once;
 
-const SUBDEV: u32 = 0;
-const RANGE: u32 = 0;
-const AREF: u32 = AREF_GROUND;
+const DEV_PATH: &'static str = "/dev/comedi0";
 
-lazy_static! {
-    static ref PORT: Option<&mut comedi_t>  = {
-        unsafe {
-            let mut it = comedi_open("/dev/comedi0".as_ptr() as *mut i8).as_mut();
-            let it: &comedi_t = it.expect("Unable to open device");
-            it
-        }
 
-    }
- 
+
+pub struct ComediDevice {
+    subdev: u32,
+    range: u32,
+    aref: u32,
+    it: Rc<RefCell<comedi_t>>,
 }
 
-enum AnalogChannel {
+pub struct AnalogChannel {
+    _type: AnalogType,
+    dev: ComediDevice,
+}
+
+pub enum AnalogType {
     AnalogIn(u32),
     AnalogOut(u32),
 
 }
 
-enum DigitalChannel {
+pub struct DigitalChannel {
+    _type: DigitalType,
+    dev: ComediDevice,
+}
+
+pub enum DigitalType {
     DigitalIn(u32),
     DigitalOut(u32),
 }
 
-enum IOError {
+#[derive(Debug)]
+pub enum IOError {
     ReadOnly,
     WriteOnly,
     ReadError,
     WriteError,
     PortNotOpen,
+    DeviceError
 }
 
 
+impl ComediDevice {
+    pub fn new(subdev: u32, range: u32, aref: u32, init: Rc<RefCell<comedi_t>>)
+    -> Self {
+        let dev = ComediDevice {
+            subdev,
+            range,
+            aref,
+            it: Rc::clone(&init),
+        };
+        return dev;
+    }
+
+    pub fn init_device() -> Result<Rc<RefCell<comedi_t>>,IOError> {
+        let mut it: comedi_t = comedi_t {
+            _unused:[]
+        };
+        unsafe {
+            let temp = comedi_open(DEV_PATH.as_ptr() as *const i8).as_mut();
+            it = *(temp.ok_or(IOError::DeviceError)?);
+        }
+
+        return Ok(Rc::new(RefCell::new(it)));
+    }
+
+}
+
 impl AnalogChannel {
+
+    pub fn new(_type: AnalogType, dev: ComediDevice) -> Self {
+        Self {
+            _type,
+            dev,
+        }
+    }
 
     pub fn read(&self) -> Result<u32, IOError> {
         // TODO: read analog data from iobox.
         let mut retval: i32 = 0;
         let mut data: u32 = 0;
-        if let AnalogIn(chan) = &self {
+        if let AnalogType::AnalogIn(chan) = &self._type {
             unsafe {
                 let mut data_p: *mut lsampl_t = ptr::null_mut();
-                let valid_port = PORT.ok_or(PortNotOpen)?;
-                retval = comedi_data_read(valid_port, SUBDEV, chan, RANGE, AREF, data_p);
+                retval = comedi_data_read(&mut *(*self.dev.it).borrow_mut(), self.dev.subdev, *chan, self.dev.range,
+                    self.dev.aref, data_p);
                 if retval < 0 {
-                    return Err(ReadError);
+                    return Err(IOError::ReadError);
                 }
                 data = *data_p as u32;
             }
             return Ok(data);
 
         } else {
-            return Err(WriteOnly);
+            return Err(IOError::WriteOnly);
         }
 
     }
 
-    pub fn write(&self) -> io::Result<u32> {
+    pub fn write(&self) -> Result<u32, IOError> {
         // TODO: write data to iobox
         unimplemented!();
     }
@@ -77,12 +116,12 @@ impl AnalogChannel {
 
 impl DigitalChannel {
 
-    pub fn read(&self) -> io::Result<u32> {
+    pub fn read(&self) -> Result<u32, IOError> {
         // TODO: read analog data from iobox.
         unimplemented!();
     }
 
-    pub fn write(&self) -> io::Result<u32> {
+    pub fn write(&self) -> Result<u32, IOError> {
         // TODO: write data to iobox
         unimplemented!();
     }
