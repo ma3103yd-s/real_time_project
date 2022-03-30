@@ -8,8 +8,9 @@ use std::{
 };
 
 pub struct Regul {
-    OutC: PID,
-    InC: PID,
+    OutC: Arc<Rwlock<PID>>,
+    ModeMon:ModeMonitor,
+    InC: Arc<Rwlock<PID>>,
     refGen: referenceGenerator,
     uMin: f64,
     uMax: f64,
@@ -35,6 +36,10 @@ impl Regul {
                 "OFF" => {
                     self.u = 0.0;
                     writeOutput(self.u);
+                    let mut mode = &*self.ModeMon.mode;
+                    let cvar = &*self.ModeMon.cond;
+                    while(cvar.wait(mode).unwrap()==OFF){
+                    }
                     break;
                 }
 
@@ -43,6 +48,7 @@ impl Regul {
                     yRef = refGen.getRef();
 
                     //Synchronize inner
+                    inner = inC.lock.unwrap();
                     u = limit(InC.calculateOutput(y, yRef));
                     writeOutput(u);
                     InC.updateState(u);
@@ -59,17 +65,22 @@ impl Regul {
                         let uFF = refGen.getUff();
 
                         //Synchronize Outer
-                        let vO = OutC.calculateOutput(y0, yref) + phiFF;
-                        let uO = limit(vO);
-                        OutC.updateState(uO-phiFF);
+                        {
+                            outer = outC.lock.unwrap();
+                            let vO = outer.calculateOutput(y0, yref) + phiFF;
+                            let uO = limit(vO);
+                            outer.updateState(uO-phiFF);
+                        }
 
                         //Synchronize Inner
-                        let yI = analogInAngle.get();
-                        let vI = InC.calculateOutput(yI, uO) + uFF;
-                        let uI = limit(vI);
-                        InC.updateState(uI-uFF);
-                        analogOut.set(uI);
-
+                        {
+                            inner = inC.lock.unwrap();
+                            let yI = analogInAngle.get();
+                            let vI = inner.calculateOutput(yI, uO) + uFF;
+                            let uI = limit(vI);
+                            inner.updateState(uI-uFF);
+                            analogOut.set(uI);
+                        }
                         analogRef.set(refGen.getRef());
 
                         t = t + InC.getHMillis();
