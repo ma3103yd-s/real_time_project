@@ -1,30 +1,31 @@
-use std::sync::{Arc, Mutex,Condvar};
+use std::sync::{Arc, Mutex, Condvar};
 pub enum Mode {
     OFF,
-    Beam,
-    Ball,
+    BEAM,
+    BALL,
 }
 
 pub struct ModeMonitor{
-    mode: Arc<Mutex<Mode>>,
-    pub cond: Condvar
+    pub mode: Arc<Mutex<Mode>, Condvar>,
 }
 
 impl ModeMonitor {
-    pub fn construct()-> Self{
-        Self{
-            mutex: Arc::new(Mutex::new(OFF))
-            cond CondVar::new();
-        };
+    pub fn new()-> Self {
+        Self {
+            mutex: Arc::new((Mutex::new(Mode::OFF), Condvar::new()),
+        }
     }
 
-    pub fn setMode(&mut self, Mode newMode){
-        let mut muter = self.mode.lock().unwrap();
-        *muter = newMode;
+    pub fn set_mode(&mut self, m: Mode) {
+        let (muter, cvar) = &*self.mode;
+        let mut muter = muter.lock().unwrap();
+        *muter = m;
         cond.notify_all();
     }
 
-    pub fn getMode(&mut self)->Mode{
-        return = self.mode.lock().unwrap();
+    pub fn get_mode(&mut self) -> Mode {
+        let (muter, _) = &*self.mode;
+        return *muter.lock().unwrap();
+
     }
 }

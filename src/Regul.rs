@@ -1,3 +1,7 @@
+
+const UMAX: f64 = 10.0;
+const UMIN: f64 = -10.0;
+
 use std::{
     sync::{
         atomic::{AtomicBool, Ordering},
@@ -8,65 +12,64 @@ use std::{
 };
 
 pub struct Regul {
-    OutC: Arc<Rwlock<PID>>,
-    ModeMon:ModeMonitor,
-    InC: Arc<Rwlock<PID>>,
-    refGen: referenceGenerator,
-    uMin: f64,
-    uMax: f64,
-    analogInPosition: AnalogSource,
-    analogInAngle: AnalogSource,
-    analogOut: AnalogSink,
-    analogRef: AnalogSink,
+    outer: Arc<Rwlock<PID>>,
+    mode:ModeMonitor,
+    inner: Arc<Rwlock<PID>>,
+    ref_gen: referenceGenerator,
+    analog_pos: AnalogChannel,
+    analog_angle: AnalogChannel,
+    analog_out: AnalogChannel,
+    analog_ref: AnalogChannel,
 }
 impl Regul {
     fn limit(&mut self, u: f64) {
-        if (u < self.uMin) {
-            return self.uMin;
-        } else if (u > self.uMax) {
-            return self.uMax;
+        if (u < UMIN) {
+            return UMIN;
+        } else if (u > UMAX) {
+            return UMAX;
         }
         return u;
     }
 
     fn run() {
         while () {
-            CASE = modeMon.getMode();
-            match CASE {
-                "OFF" => {
+            
+            match mode.get_mode() {
+                OFF => {
                     self.u = 0.0;
                     writeOutput(self.u);
-                    let mut mode = &*self.ModeMon.mode;
-                    let cvar = &*self.ModeMon.cond;
-                    while(cvar.wait(mode).unwrap()==OFF){
+                    let (lock, cvar) = &*self.mode.mode;
+                    let mut mode_change = lock.lock().unwrap();
+                    while(*mode_change == OFF){
+                        mode_change = cvar.wait(mode_change).unwrap();
                     }
                     break;
                 }
 
-                "BEAM" => {
-                    y = readInput(analogInAngle);
+                BEAM => {
+                    y = read_input(analogInAngle);
                     yRef = refGen.getRef();
 
                     //Synchronize inner
-                    inner = inC.lock.unwrap();
-                    u = limit(InC.calculateOutput(y, yRef));
-                    writeOutput(u);
-                    InC.updateState(u);
+                    let mut inner = &*self.inner.lock().unwrap();
+                    u = limit(inner.calculateOutput(y, yRef));
+                    write_output(u);
+                    inner.update_state(u);
                 }
 
-                "BALL" => {
+                BALL => {
                     let mut duration = 0;
                     let mut t = SystemTime::now();
 
                     loop {
-                        let y0 = analogInPosition.get();
+                        let y0 = analog_position.get();
                         let yref = refGen.getRef();
                         let phiFF = refGen.getPhiFF();
                         let uFF = refGen.getUff();
 
                         //Synchronize Outer
                         {
-                            outer = outC.lock.unwrap();
+                            let mut outer = &*self.outer.lock.unwrap();
                             let vO = outer.calculateOutput(y0, yref) + phiFF;
                             let uO = limit(vO);
                             outer.updateState(uO-phiFF);
@@ -74,19 +77,19 @@ impl Regul {
 
                         //Synchronize Inner
                         {
-                            inner = inC.lock.unwrap();
-                            let yI = analogInAngle.get();
+                            inner = &*self.inner.lock.unwrap();
+                            let yI = analog_angle.get();
                             let vI = inner.calculateOutput(yI, uO) + uFF;
                             let uI = limit(vI);
                             inner.updateState(uI-uFF);
-                            analogOut.set(uI);
+                            analog_out.set(uI);
                         }
-                        analogRef.set(refGen.getRef());
+                        analog_ref.set(refGen.getRef());
 
                         t = t + InC.getHMillis();
                         let duration = SystemTime::now().duration_since(t);
                         if (duration > 0) {
-                            thread::sleep(duration)
+                            thread::sleep(duration);
                         }
                     }
                 }
