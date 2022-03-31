@@ -28,13 +28,13 @@ impl PID{
             ad: 0.0,
             bd: 0.0
         };
-        temp.setParameters(p);
+        temp.set_parameters(p);
         return temp;
 
 
     }
 
-    pub fn calculateOutput(&mut self, y: f64, yref: f64) -> f64{
+    pub fn calculate_output(&mut self, y: f64, yref: f64) -> f64{
         self.ynew = y;
         self.e = yref - y;
         self.D = self.ad*self.D - self.bd*(y - self.yold);
@@ -42,7 +42,7 @@ impl PID{
         return self.v;
     }
 
-    pub fn updateState(&mut self, u: f64){
+    pub fn update_state(&mut self, u: f64){
         if (self.p.integratorOn) {
             // Forward Euler approximation
             self.I += (self.p.K * self.p.H / self.p.Ti) *
@@ -57,7 +57,7 @@ impl PID{
         return (self.p.H * 1000);
     }
 
-    pub fn setParameters(&mut self, params: PIDparams) {
+    pub fn set_parameters(&mut self, params: PIDparams) {
         self.p = params.copy();
         if(self.p.integratorOn) {
             self.I = 0.0;
@@ -67,7 +67,7 @@ impl PID{
     }
 
     pub fn with_parameters(mut self, params: PIDparams) -> Self {
-        self.setParameters(params);
+        self.set_parameters(params);
         self
 
     }
