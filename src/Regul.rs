@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 
 const UMAX: f64 = 10.0;
 const UMIN: f64 = -10.0;
@@ -13,17 +12,15 @@ use std::{
     thread,
     time::Duration,
 };
-=======
-use iobox::Analog::{AnalogRead, AnalogWrite};
-
->>>>>>> iobox
 
 use pid::PID;
-use sim::Analog;
+use sim::Analog::{
+    AnalogChannel,
+    AnalogType::{AnalogIn, AnalogOut}
+};
 use sim::Digital;
 
 pub struct Regul {
-<<<<<<< HEAD
     outer: Arc<RwLock<PID>>,
     mode: ModeMonitor,
     inner: Arc<RwLock<PID>>,
@@ -139,21 +136,5 @@ impl Regul {
                 }
             }
         }
-=======
-    OutC: PID,
-    InC: PID,
-    refGen: referenceGenerator,
-    uMin: f64,
-    uMax: f64,
-    analogInPosition: Analog,
-    analogInAngle: Analog,
-    analogOut: Analog,
-    analogRef: Analog,
-}
-impl Regul {
-    //TODO: Implement the Regul-thread that reads and writes to the I/O-channels
-    fn run() {
-        unimplemented!();
->>>>>>> iobox
     }
 }
