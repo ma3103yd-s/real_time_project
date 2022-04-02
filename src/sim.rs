@@ -81,15 +81,15 @@ impl AnalogChannel {
         }
     }
 
-    pub fn read(&self) -> Result<u32, IOError> {
+    pub fn read(&self) -> Result<f32, IOError> {
         // TODO: read analog data from iobox.
         let mut retval: i32 = 0;
         let mut buf = [0;4];
-        let mut data: u32 = 0;
+        let mut data: f32 = 0;
         if let AnalogType::AnalogIn(chan) = &self._type {
             let mut f = (*self.dev.it).borrow_mut();
             let n = f.read(&mut buf[..]).map_err(|_| IOError::ReadError)?;
-            data = u32::from_ne_bytes(buf);
+            data = f32::from_ne_bytes(buf);
 
         } else {
             return Err(IOError::WriteOnly);
@@ -98,7 +98,7 @@ impl AnalogChannel {
 
     }
 
-    pub fn write(&self, data: u32) -> Result<(), IOError> {
+    pub fn write(&self, data: f32) -> Result<(), IOError> {
         // TODO: write data to iobox
         if let AnalogType::AnalogOut(chan) = &self._type {
             let mut f = (*self.dev.it).borrow_mut();
@@ -127,7 +127,6 @@ impl VirtualWriter {
     }
 
     pub fn start_writing(self, dev: &'static str, sampling_time: u64) -> io::Result<thread::JoinHandle<()>> {
-        println!("INITIALIZING THREAD");
         self.0.spawn(move || {
             let mut f = OpenOptions::new().write(true).open(dev).unwrap();
             let mut writer = BufWriter::new(f);

@@ -8,6 +8,8 @@
 include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 pub mod iobox;
 pub mod sim;
+pub mod pid;
+pub mod Regul;
 
 
 
@@ -19,30 +21,37 @@ mod tests {
     use sim::VirtualWriter;
     use std::thread;
     use std::time;
+    use pid::PID;
+    use mode::ModeMonitor;
     
     #[test]
     fn test_virtual_analog() {
-        let v = VirtualWriter::new();
-        let v = v.start_writing("/tmp/write", 10).unwrap();
+        let ang_writer = VirtualWriter::new();
+        let ang_writer = ang_writer.start_writing("/tmp/ang", 10).unwrap();
+        let pos_writer = VirtualWriter::new();
+        let pos_writer = pos_writer.start_writing("/tmp/pos", 10).unwrap();
         let sampler = thread::Builder::new();
+        let it = ComediDevice::init_device("/tmp/read").expect("Failed to init device");
+        let it_2 = ComediDevice::init_device("/tmp/write").expect("Failed to init device");
+        let dev = ComediDevice::new(0, 30000, AREF_GROUND, it);
+        let dev_2 = ComediDevice::new(0, range, AREF_GROUND, it_2);
+        let analog_read = sim::AnalogChannel::new(AnalogType::AnalogIn(1), dev);
+        let analog_write = sim::AnalogChannel::new(AnalogType::AnalogOut(1),dev_2);
+        let inner = Arc::new(RwLock::new(PID::new()));
+        let outer = Arc::new(RwLock::new(PID::new()));
+
+
+        let mode = ModeMonitor::init();
+        let regul_mode = ModeMonitor::new(mode.clone_arc());
+
+        let mut regul = Regul::new(Arc::clone(&inner), Arc::clone(&outer), 
+                    regul_mode);
         
-          let t = sampler.spawn(|| {
-            let it = ComediDevice::init_device("/tmp/read").expect("Failed to init device");
-            let dev = ComediDevice::new(0, 30000, AREF_GROUND, it);
-            let analog_read = sim::AnalogChannel::new(AnalogType::AnalogIn(1), dev);
-            let mut result:u32 = 0;
-            let mut counter = 0;
-            while counter < 20 {
-                result = analog_read.read().unwrap_or(result);
-                println!("Result is {}", result);
-                thread::sleep(time::Duration::from_millis(20));
-                counter +=1;
-            }
-            ()
-            
+        let t = sampler.spawn(move || {
+            regul.run();
         }).unwrap();  
 
-        v.join();
+        ang_writer.join();
         t.join();
 
 

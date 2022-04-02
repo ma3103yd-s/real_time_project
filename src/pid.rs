@@ -1,6 +1,6 @@
 
 
-pub struct PID{
+pub struct PID {
     p: PIDParam,
     v: f64, 
     ynew: f64, 
@@ -53,7 +53,7 @@ impl PID{
         self.eold = self.e;
     }
 
-    pub fn getHMillis() -> f64{
+    pub fn get_h_millis(&self) -> f64{
         return (self.p.H * 1000);
     }
 

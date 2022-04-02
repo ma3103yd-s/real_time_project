@@ -10,10 +10,20 @@ pub struct ModeMonitor{
 }
 
 impl ModeMonitor {
-    pub fn new()-> Self {
+    pub fn init()-> Self {
         Self {
-            mutex: Arc::new((Mutex::new(Mode::OFF), Condvar::new()),
+            mutex: Arc::new((Mutex::new(Mode::OFF), Condvar::new())),
         }
+    }
+
+    pub fn new(mutex: Arc<Mutex<Mode>, Condvar>) -> Self {
+        Self {
+            mutex,
+        }
+    }
+
+    pub fn clone_arc(&self) -> Arc<Mutex<Mode>, Condvar> {
+        Arc::clone(&self.mode)
     }
 
     pub fn set_mode(&mut self, m: Mode) {
