@@ -96,8 +96,9 @@ impl AnalogChannel {
                     return Err(IOError::ReadError);
                 }
                 data = *data_p as u32;
+                phys_data = convert_to_physical(data, MAXVAL, &RANGE)
             }
-            return Ok(data);
+            return Ok(phys_data);
 
         } else {
             return Err(IOError::WriteOnly);
@@ -105,9 +106,47 @@ impl AnalogChannel {
 
     }
 
-    pub fn write(&self) -> Result<u32, IOError> {
+    fn convert_to_physical(data: u32, maxval: u32, range: &[f32;2]) -> f32 {
+        let length = abs(range[1]-range[0]);
+        let dx = length/maxval as f32;
+        0..maxval.map(|x| {
+            (x, range[0]+x*dx)
+        }).filter(|(i, xx)| {
+            i==data
+        }).unwrap().0
+
+    }
+
+    fn convert_from_physical(data: f32, maxval: u32, range: &[f32;2]) -> u32 {
+        let length = abs(range[1]-range[0]);
+        let dx = length/maxval as f32;
+        0..maxval.map(|x| {
+            (x, range[0]+x*dx)
+        }).filter(|(i, xx)| {
+            xx>=data
+        }).take(1).unwrap().1
+        
+    }
+
+    pub fn write(&self, phys_data: f32) -> Result<(), IOError> {
         // TODO: write data to iobox
-        unimplemented!();
+        if let AnalogType::AnalogOut(chan) = &self._type {
+            unsafe {
+                let data  = convert_from_physical(phys_data, MAXVAL, &RANGE);
+                let data_p: lsampl_t = lsampl_t {data};
+                retval = comedi_data_write(&mut *(*self.dev.it).borrow_mut(), self.dev.subdev, *chan, self.dev.range,
+                    self.dev.aref, data_p);
+                if retval < 0 {
+                    return Err(IOError::WriteError);
+                }
+            }
+            return Ok(());
+
+        } else {
+            return Err(IOError::ReadOnly);
+        }
+
+
     }
 
 
