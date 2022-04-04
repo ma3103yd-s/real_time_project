@@ -1,4 +1,4 @@
-
+use std::ffi::CString;
 use std::{ptr, cell::RefCell, rc::Rc};
 // TODO: 
 // Define constants relating to subdev, ports, etc of the ioboc
@@ -65,7 +65,8 @@ impl ComediDevice {
             _unused:[]
         };
         unsafe {
-            let temp = comedi_open(DEV_PATH.as_ptr() as *const i8).as_mut();
+            let c_string = CString::new(DEV_PATH).expect("CString failed");
+            let temp = comedi_open(c_string.as_ptr()).as_mut();
             it = *(temp.ok_or(IOError::DeviceError)?);
         }
 
@@ -89,13 +90,14 @@ impl AnalogChannel {
         let mut data: u32 = 0;
         if let AnalogType::AnalogIn(chan) = &self._type {
             unsafe {
-                let mut data_p: *mut lsampl_t = ptr::null_mut();
-                retval = comedi_data_read(&mut *(*self.dev.it).borrow_mut(), self.dev.subdev, *chan, self.dev.range,
-                    self.dev.aref, data_p);
-                if retval < 0 {
+                let mut data_p: lsampl_t = 0;
+                let mut it = *(*self.dev.it).borrow_mut();
+                retval = comedi_data_read(&mut it, self.dev.subdev, *chan, self.dev.range,
+                    self.dev.aref, &mut data_p);
+                /* if retval < 0 {
                     return Err(IOError::ReadError);
-                }
-                data = *data_p as u32;
+                } */
+                data = data_p;
             }
             return Ok(data);
 
