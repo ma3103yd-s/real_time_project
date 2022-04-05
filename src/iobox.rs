@@ -13,7 +13,7 @@ pub struct ComediDevice {
     subdev: u32,
     range: u32,
     aref: u32,
-    it: Rc<RefCell<comedi_t>>,
+    it: Rc<RefCell<*mut comedi_t>>,
 }
 
 pub struct AnalogChannel {
@@ -49,7 +49,7 @@ pub enum IOError {
 
 
 impl ComediDevice {
-    pub fn new(subdev: u32, range: u32, aref: u32, init: Rc<RefCell<comedi_t>>)
+    pub fn new(subdev: u32, range: u32, aref: u32, init: Rc<RefCell<*mut comedi_t>>)
     -> Self {
         let dev = ComediDevice {
             subdev,
@@ -60,17 +60,14 @@ impl ComediDevice {
         return dev;
     }
 
-    pub fn init_device() -> Result<Rc<RefCell<comedi_t>>,IOError> {
-        let mut it: comedi_t = comedi_t {
-            _unused:[]
-        };
+    pub fn init_device() -> Result<Rc<RefCell<*mut comedi_t>>,IOError> {
         unsafe {
             let c_string = CString::new(DEV_PATH).expect("CString failed");
             let temp = comedi_open(c_string.as_ptr()).as_mut();
-            it = *(temp.ok_or(IOError::DeviceError)?);
+            let temp = temp.ok_or(IOError::DeviceError)?;
+            return Ok(Rc::new(RefCell::new(temp)));
         }
 
-        return Ok(Rc::new(RefCell::new(it)));
     }
 
 }
@@ -87,16 +84,15 @@ impl AnalogChannel {
     pub fn read(&self) -> Result<u32, IOError> {
         // TODO: read analog data from iobox.
         let mut retval: i32 = 0;
-        let mut data: u32 = 0;
+        let mut data: u32 = 10;
         if let AnalogType::AnalogIn(chan) = &self._type {
             unsafe {
                 let mut data_p: lsampl_t = 0;
-                let mut it = *(*self.dev.it).borrow_mut();
-                retval = comedi_data_read(&mut it, self.dev.subdev, *chan, self.dev.range,
+                retval = comedi_data_read(*(*self.dev.it).borrow_mut(), self.dev.subdev, *chan, self.dev.range,
                     self.dev.aref, &mut data_p);
-                /* if retval < 0 {
+                 if retval < 0 {
                     return Err(IOError::ReadError);
-                } */
+                } 
                 data = data_p;
             }
             return Ok(data);
