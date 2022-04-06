@@ -26,14 +26,18 @@ mod tests {
        
         let it = ComediDevice::init_device().unwrap();
 
-        let dev = ComediDevice::new(1, 0, AREF_GROUND, &it);
+        //let dev = ComediDevice::new(1, 0, AREF_GROUND, &it);
 
-        let read_channel = AnalogChannel::new(AnalogIn(1), dev);
+        let write_dev = ComediDevice::new(1, 0, AREF_GROUND, it);
+
+        let write_chan = AnalogChannel::new(AnalogOut(0), write_dev);
+
+        //let read_channel = AnalogChannel::new(AnalogIn(1), dev);
 
 
-        let res = read_channel.read().unwrap();
+        write_chan.write(5000).unwrap();
 
-        println!("Value read is {}", res);
+        //println!("Value read is {}", res);
 
 
 

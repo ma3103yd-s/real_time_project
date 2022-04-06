@@ -1,3 +1,4 @@
+use std::borrow::BorrowMut;
 use std::ffi::CString;
 use std::{ptr, cell::RefCell, rc::Rc};
 // TODO: 
@@ -85,10 +86,10 @@ impl AnalogChannel {
         // TODO: read analog data from iobox.
         let mut retval: i32 = 0;
         let mut data: u32 = 10;
-        if let AnalogType::AnalogIn(chan) = &self._type {
+        if let AnalogType::AnalogIn(chan) = self._type {
             unsafe {
                 let mut data_p: lsampl_t = 0;
-                retval = comedi_data_read(*(*self.dev.it).borrow_mut(), self.dev.subdev, *chan, self.dev.range,
+                retval = comedi_data_read(*(*self.dev.it).borrow_mut(), self.dev.subdev, chan, self.dev.range,
                     self.dev.aref, &mut data_p);
                  if retval < 0 {
                     return Err(IOError::ReadError);
@@ -103,9 +104,21 @@ impl AnalogChannel {
 
     }
 
-    pub fn write(&self) -> Result<u32, IOError> {
+    pub fn write(&self, val: u32) -> Result<(), IOError> {
         // TODO: write data to iobox
-        unimplemented!();
+        let mut retval: i32 = 0;
+        if let AnalogType::AnalogOut( chan) = self._type {
+            unsafe {
+                retval = comedi_data_write(*(*self.dev.it).borrow_mut(), self.dev.subdev, chan, self.dev.range, self.dev.aref, val);
+            }
+            if  retval < 0 {
+                return Err(IOError::WriteError);
+            }
+            return Ok(());
+        }
+
+        return Err(IOError::ReadOnly);
+        
     }
 
 

@@ -4,6 +4,17 @@ const UMIN: f64 = -10.0;
 
 pub struct ReferenceGenerator(f64);
 
+
+impl ReferenceGenerator {
+    pub fn new(val: f64) {
+        Self {val}
+    }
+
+    pub fn get_ref(&self) -> f64 {
+        self.0
+    }
+}
+
 use std::{
     sync::{
         RwLock,
@@ -28,7 +39,6 @@ pub struct Regul {
     analog_pos: AnalogChannel,
     analog_angle: AnalogChannel,
     analog_out: AnalogChannel,
-    analog_ref: AnalogChannel,
 }
 impl Regul {
 
@@ -41,14 +51,13 @@ impl Regul {
         let it = ComediDevice::init_device().unwrap();
 
 
-        let com_pos = ComediDevice::new(1, 60000, AREF_GROUND, &it);
-        let com_ang = ComediDevice::new(2, 60000, AREF_GROUND, &it);
-        let com_write = ComediDevice::new(3, 60000, AREF_GROUND, &it);
+        let com_pos = ComediDevice::new(0, 0, AREF_GROUND, &it);
+        let com_ang = ComediDevice::new(0, 1, AREF_GROUND, &it);
+        let com_write = ComediDevice::new(1, 0, AREF_GROUND, &it);
 
         let analog_pos = AnalogChannel::new(AnalogRead(0), com_pos);
         let analog_angle = AnalogChannel::new(AnalogRead(1), com_ang);
-        let analog_out = AnalogChannel::new(AnalogWrite(0), com_write);
-        let analog_ref = AnalogChannel::new(AnalogWrite(1));
+        let analog_out = AnalogChannel::new(AnalogWrite(1), com_write);
 
         Self {
             outer,
@@ -58,7 +67,6 @@ impl Regul {
             analog_pos,
             analog_angle,
             analog_out,
-            analog_ref,
         }
         
     }
