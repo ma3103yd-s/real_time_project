@@ -7,7 +7,7 @@ pub struct ReferenceGenerator(f64);
 
 impl ReferenceGenerator {
     pub fn new(val: f64) {
-        Self {val}
+        Self(val)
     }
 
     pub fn get_ref(&self) -> f64 {
@@ -79,7 +79,7 @@ impl Regul {
         Arc::clone(&self.outer)
     }
 
-    fn limit(&mut self, u: f64) {
+    fn limit(&mut self, u: f32) {
         if (u < UMIN) {
             return UMIN;
         } else if (u > UMAX) {
@@ -94,7 +94,7 @@ impl Regul {
             match mode.get_mode() {
                 OFF => {
                     self.u = 0.0;
-                    write_output(self.u);
+                    self.analog_out.write(u);
                     let (lock, cvar) = &*self.mode.mode;
                     let mut mode_change = lock.lock().unwrap();
                     while(*mode_change == OFF){
@@ -104,17 +104,19 @@ impl Regul {
                 }
 
                 BEAM => {
-                    y = read_input(analogInAngle);
-                    yRef = refGen.getRef();
+                    y = self.analog_ang.read();
+
+                    yRef = self.ref_gen.get_ref();
 
                     //Synchronize inner
                     let mut inner = &*self.inner.lock().unwrap();
                     u = limit(inner.calculate_output(y, yRef));
-                    write_output(u);
+                    self.analog_out.write(u);
                     inner.update_state(u);
                 }
 
-                BALL => {
+                 BALL => {
+                    /*
                     let mut duration = 0;
                     let mut t = SystemTime::now();
 
@@ -148,7 +150,7 @@ impl Regul {
                         if (duration > 0) {
                             thread::sleep(duration);
                         }
-                    }
+                    } */
                 }
             }
         }
