@@ -111,16 +111,23 @@ impl AnalogChannel {
 
     }
     pub fn to_physical(val: u32, max_data_val: u32, range: &[f32;2])-> f32{
-        let ratio = abs(range[0]-range[1])/max_data_val as f32;
-        let new_val = ratio*val + range[0];
-        return ratio*val;
+        let ratio = (range[0]-range[1]).abs()/max_data_val as f32;
+        let new_val = ratio*(val as f32) + range[0];
+        return new_val;
     }
 
-    pub fn write(&self, val: u32) -> Result<(), IOError> {
+    pub fn from_physical(val: f32, max_data_val: f32, range: &[f32;2])-> u32{
+        let ratio = max_data_val/(range[0]-range[1]).abs();
+        let new_val = (ratio*(val-range[0])) as u32 ;
+        return new_val;
+
+    }
+    pub fn write(&self, val: f32) -> Result<(), IOError> {
         // TODO: write data to iobox
         let mut retval: i32 = 0;
         if let AnalogType::AnalogOut( chan) = self._type {
             unsafe {
+                let val = from_physical(val,MAX_VAL,RANGE_1);
                 retval = comedi_data_write(*(*self.dev.it).borrow_mut(), self.dev.subdev, chan, self.dev.range, self.dev.aref, val);
             }
             if  retval < 0 {
