@@ -26,7 +26,7 @@ mod tests {
        
         let it = ComediDevice::init_device().unwrap();
 
-        let dev = ComediDevice::new(1, 0, AREF_GROUND, it);
+        let dev = ComediDevice::new(1, 0, AREF_GROUND, &it);
 
         let read_channel = AnalogChannel::new(AnalogIn(1), dev);
 

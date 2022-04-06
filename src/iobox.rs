@@ -49,13 +49,13 @@ pub enum IOError {
 
 
 impl ComediDevice {
-    pub fn new(subdev: u32, range: u32, aref: u32, init: Rc<RefCell<*mut comedi_t>>)
+    pub fn new(subdev: u32, range: u32, aref: u32, init: &Rc<RefCell<*mut comedi_t>>)
     -> Self {
         let dev = ComediDevice {
             subdev,
             range,
             aref,
-            it: Rc::clone(&init),
+            it: Rc::clone(init),
         };
         return dev;
     }

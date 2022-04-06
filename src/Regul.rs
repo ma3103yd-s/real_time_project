@@ -33,13 +33,21 @@ pub struct Regul {
 impl Regul {
 
 
-    pub fn new(outer: PID, mode: ModeMonitor, inner: PID,
+    pub fn new(outer: &Arc<RwLock<PID>>, mode: ModeMonitor, inner: &Arc<RwLock<PID>>,
     ref_gen: ReferenceGenerator) -> Self {
-        let outer = Arc::new(RwLock::new(outer));
-        let inner = Arc::new(RwLock::new(inner));
-        let analog_pos = AnalogChannel::new(AnalogRead(0));
-        let analog_angle = AnalogChannel::new(AnalogRead(1));
-        let analog_out = AnalogChannel::new(AnalogWrite(0));
+        let outer = Arc::clone(outer);
+        let inner = Arc::clone(inner);
+        
+        let it = ComediDevice::init_device().unwrap();
+
+
+        let com_pos = ComediDevice::new(1, 60000, AREF_GROUND, &it);
+        let com_ang = ComediDevice::new(2, 60000, AREF_GROUND, &it);
+        let com_write = ComediDevice::new(3, 60000, AREF_GROUND, &it);
+
+        let analog_pos = AnalogChannel::new(AnalogRead(0), com_pos);
+        let analog_angle = AnalogChannel::new(AnalogRead(1), com_ang);
+        let analog_out = AnalogChannel::new(AnalogWrite(0), com_write);
         let analog_ref = AnalogChannel::new(AnalogWrite(1));
 
         Self {
