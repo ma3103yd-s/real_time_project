@@ -6,7 +6,9 @@ use crate::*;
 use std::sync::Once;
 
 const DEV_PATH: &'static str = "/dev/comedi0";
-
+const MAX_VAL: u32 = 65535;
+const RANGE_1: [f32;2] = [-10.0,10.0];
+const RANGE_2: [f32;2] = [-5.0,5.0];
 
 
 pub struct ComediDevice {
@@ -81,19 +83,24 @@ impl AnalogChannel {
         }
     }
 
-    pub fn read(&self) -> Result<u32, IOError> {
+    pub fn read(&self) -> Result<f32, IOError> {
         // TODO: read analog data from iobox.
         let mut retval: i32 = 0;
         let mut data: u32 = 10;
-        if let AnalogType::AnalogIn(chan) = &self._type {
+        if let AnalogType::AnalogIn(chan) = self._type {
             unsafe {
                 let mut data_p: lsampl_t = 0;
-                retval = comedi_data_read(*(*self.dev.it).borrow_mut(), self.dev.subdev, *chan, self.dev.range,
+                retval = comedi_data_read(*(*self.dev.it).borrow_mut(), self.dev.subdev, chan, self.dev.range,
                     self.dev.aref, &mut data_p);
                  if retval < 0 {
                     return Err(IOError::ReadError);
                 } 
                 data = data_p;
+                if(chan == 0){
+                    data = to_physical(data,MAX_VAL,&RANGE_1);
+                } else {
+                    data = to_physical(data,MAX_VAL,&RANGE_2);
+                }
             }
             return Ok(data);
 
@@ -102,10 +109,15 @@ impl AnalogChannel {
         }
 
     }
+    pub fn to_physical(val: u32, max_data_val: u32, range: &[f32;2])-> f32{
+        let ratio = abs(range[0]-range[1])/max_data_val as f32;
+        let new_val = ratio*val + range[0];
+        return ratio*val;
+    }
 
     pub fn write(&self) -> Result<u32, IOError> {
         // TODO: write data to iobox
-        unimplemented!();
+       
     }
 
 
