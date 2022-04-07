@@ -88,6 +88,7 @@ impl AnalogChannel {
         // TODO: read analog data from iobox.
         let mut retval: i32 = 0;
         let mut data: u32 = 10;
+        let mut r_data: f32 = 0.0;
         if let AnalogType::AnalogIn(chan) = self._type {
             unsafe {
                 let mut data_p: lsampl_t = 0;
@@ -98,12 +99,12 @@ impl AnalogChannel {
                 } 
                 data = data_p;
                 if(chan == 0){
-                    data = to_physical(data,MAX_VAL,&RANGE_1);
+                    r_data = to_physical(data,MAX_VAL,&RANGE_1);
                 } else {
-                    data = to_physical(data,MAX_VAL,&RANGE_2);
+                    r_data = to_physical(data,MAX_VAL,&RANGE_2);
                 }
             }
-            return Ok(data);
+            return Ok(r_data);
 
         } else {
             return Err(IOError::WriteOnly);

@@ -48,13 +48,13 @@ impl PID{
             self.I += (self.p.K * self.p.H / self.p.Ti) *
                 self.e + (self.p.H / self.p.Tr) * (u - self.v);
         } else {
-            self.I = 0;
+            self.I = 0.0;
         }
         self.eold = self.e;
     }
 
-    pub fn getHMillis() -> f64{
-        return (self.p.H * 1000);
+    pub fn get_sampling_time() -> f64{
+        return (self.p.H * 1000.0);
     }
 
     pub fn set_parameters(&mut self, params: PIDparams) {

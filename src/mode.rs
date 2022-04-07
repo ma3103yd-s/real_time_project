@@ -12,7 +12,7 @@ pub struct ModeMonitor{
 impl ModeMonitor {
     pub fn new()-> Self {
         Self {
-            mutex: Arc::new((Mutex::new(Mode::OFF), Condvar::new()),
+            mode: Arc::new((Mutex::new(Mode::OFF), Condvar::new())),
         }
     }
 

@@ -25,11 +25,11 @@ use std::{
 };
 
 use pid::PID;
-use sim::Analog::{
+use iobox::{ComediDevice, Analog::{
     AnalogChannel,
     AnalogType::{AnalogIn, AnalogOut}
-};
-use sim::Digital;
+}};
+use iobox::Digital;
 
 pub struct Regul {
     outer: Arc<RwLock<PID>>,
@@ -100,8 +100,8 @@ impl Regul {
                     while(*mode_change == OFF){
                         mode_change = cvar.wait(mode_change).unwrap();
                     }
-                    break;
-                }
+                    
+                },
 
                 BEAM => {
                     y = self.analog_ang.read();
@@ -113,7 +113,7 @@ impl Regul {
                     u = limit(inner.calculate_output(y, yRef));
                     self.analog_out.write(u);
                     inner.update_state(u);
-                }
+                },
 
                  BALL => {
                     /*
@@ -151,7 +151,7 @@ impl Regul {
                             thread::sleep(duration);
                         }
                     } */
-                }
+                },
             }
         }
     }

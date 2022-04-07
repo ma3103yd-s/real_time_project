@@ -8,6 +8,9 @@
 include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 pub mod iobox;
 pub mod sim;
+pub mod mode;
+pub mod pid;
+pub mod regul;
 
 
 
