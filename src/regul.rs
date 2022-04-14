@@ -70,8 +70,8 @@ impl Regul {
         let com_ang = ComediDevice::new(0, 1, AREF_GROUND, com_pos.clone_dev());
         let com_write = ComediDevice::new(1, 0, AREF_GROUND, com_pos.clone_dev());
 
-        let analog_pos = AnalogChannel::new(AnalogIn(0), com_pos);
-        let analog_angle = AnalogChannel::new(AnalogIn(1), com_ang);
+        let analog_pos = AnalogChannel::new(AnalogIn(1), com_pos);
+        let analog_angle = AnalogChannel::new(AnalogIn(0), com_ang);
         let analog_out = AnalogChannel::new(AnalogOut(1), com_write);
 
         Self {
@@ -98,6 +98,7 @@ impl Regul {
 
     pub fn run(&mut self) {
         loop {
+            let mut t = SystemTime::now();
             let (lock, cvar) = &*self.mode.mode;
             let mut mode_change = lock.lock().unwrap();
             let mut inner = &mut (*self.inner).write().unwrap();
@@ -115,11 +116,15 @@ impl Regul {
                     let y = self.analog_angle.read().unwrap(); // Handle result later
 
                     let yRef = self.ref_gen.get_ref();
+                    println!("yref is {}", yRef);
 
                     //Synchronize inner
                     //let mut inner = &mut (*self.inner).write().unwrap();
                     let u = limit(inner.calculate_output(y, yRef));
-                    self.analog_out.write(u);
+                    //println!("y is {}", y);
+                    //println!("u is {}", u);
+                    let w_val = self.analog_out.write(u).unwrap();
+                    //println!("Value written is {}", w_val);
                     inner.update_state(u);
 
 
@@ -129,50 +134,44 @@ impl Regul {
                 },
 
                  Mode::BALL => {
-                    /*
-                    let mut duration = 0;
-                    let mut t = SystemTime::now();
+                    
+
 
                     loop {
-                        let y0 = analog_position.get();
-                        let yref = refGen.getRef();
-                        let phiFF = refGen.getPhiFF();
-                        let uFF = refGen.getUff();
+                        let y0 = self.analog_pos.read().unwrap();
+                        let yref = self.ref_gen.get_ref();
+                        let phiFF = 0.0;//ref_gen.getPhiFF();
+                        let uFF = 0.0;//ref_gen.getUff();
 
                         //Synchronize Outer
-                        {
-                            let mut outer = &*self.outer.lock.unwrap();
-                            let vO = outer.calculateOutput(y0, yref) + phiFF;
-                            let uO = limit(vO);
-                            outer.update_state(uO-phiFF);
-                        }
+                        
+                        let vO = outer.calculate_output(y0, yref) + phiFF;
+                        let uO = limit(vO);
+                        outer.update_state(uO-phiFF);
+                        
 
                         //Synchronize Inner
-                        {
-                            inner = &*self.inner.lock.unwrap();
-                            let yI = analog_angle.get();
-                            let vI = inner.calculate_output(yI, uO) + uFF;
-                            let uI = limit(vI);
-                            inner.update_state(uI-uFF);
-                            analog_out.set(uI);
-                        }
-                        analog_ref.set(refGen.getRef());
+                        
+                        let yI = self.analog_angle.read().unwrap();
+                        let vI = inner.calculate_output(yI, uO) + uFF;
+                        let uI = limit(vI);
+                        println!("pos is {}", y0);
+                        println!("u is {}", uI);
+                        println!("yref is {}", yref);
+                        inner.update_state(uI-uFF);
+                        self.analog_out.write(uI);
+                        
+                        //analog_ref.set(refGen.getRef());
 
-                        t = t + InC.getHMillis();
-                        let duration = SystemTime::now().duration_since(t);
-                        if (duration > 0) {
-                            thread::sleep(duration);
-                        }
-                    } */
+                    } 
                 },
             };
 
-            let mut duration = 0;
-            let mut t = SystemTime::now();
             t = t + Duration::from_millis(inner.get_sampling_time() as u64);
             let duration = t.duration_since(SystemTime::now());
 
             if let Ok(duration) = duration {
+                println!("Duration is {:?}", duration);
                 thread::sleep(duration);
             }
 
