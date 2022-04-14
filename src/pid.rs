@@ -44,7 +44,7 @@ pub struct PID{
 
 impl PID{
     pub fn new() -> Self {
-        let p = PIDparam::new(-0.2, 0.0, 0.05, 1.0, 5.0, 1.0, 0.05, false);
+        let p = PIDparam::new(-0.1, 0.0, 0.1, 1.0, 5.0, 1.0, 0.1, false);
         let mut temp  = Self {
             p,
             v: 0.0,

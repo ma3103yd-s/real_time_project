@@ -58,7 +58,7 @@ mod tests {
 
     #[test]
     fn test_regul() {
-        let inner_param = PIDparam::new(3.0, 0.0, 0.0, 0.0, 1.0, 1.0, 0.05, false);
+        let inner_param = PIDparam::new(3.0, 0.0, 0.0, 0.0, 1.0, 1.0, 0.1, false);
 
         let mut inner = 
             Arc::new(RwLock::new(PID::new().with_parameters(inner_param)));

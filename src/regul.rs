@@ -137,33 +137,33 @@ impl Regul {
                     
 
 
-                    loop {
-                        let y0 = self.analog_pos.read().unwrap();
-                        let yref = self.ref_gen.get_ref();
-                        let phiFF = 0.0;//ref_gen.getPhiFF();
-                        let uFF = 0.0;//ref_gen.getUff();
+                
+                    let y0 = self.analog_pos.read().unwrap();
+                    let yref = self.ref_gen.get_ref();
+                    let phiFF = 0.0;//ref_gen.getPhiFF();
+                    let uFF = 0.0;//ref_gen.getUff();
 
-                        //Synchronize Outer
-                        
-                        let vO = outer.calculate_output(y0, yref) + phiFF;
-                        let uO = limit(vO);
-                        outer.update_state(uO-phiFF);
-                        
+                    //Synchronize Outer
+                    
+                    let vO = outer.calculate_output(y0, yref) + phiFF;
+                    let uO = limit(vO);
+                    outer.update_state(uO-phiFF);
+                    
 
-                        //Synchronize Inner
-                        
-                        let yI = self.analog_angle.read().unwrap();
-                        let vI = inner.calculate_output(yI, uO) + uFF;
-                        let uI = limit(vI);
-                        println!("pos is {}", y0);
-                        println!("u is {}", uI);
-                        println!("yref is {}", yref);
-                        inner.update_state(uI-uFF);
-                        self.analog_out.write(uI);
+                    //Synchronize Inner
+                    
+                    let yI = self.analog_angle.read().unwrap();
+                    let vI = inner.calculate_output(yI, uO) + uFF;
+                    let uI = limit(vI);
+                    println!("pos is {}", y0);
+                    println!("u is {}", uI);
+                    println!("yref is {}", yref);
+                    inner.update_state(uI-uFF);
+                    self.analog_out.write(uI);
                         
                         //analog_ref.set(refGen.getRef());
 
-                    } 
+                     
                 },
             };
 
