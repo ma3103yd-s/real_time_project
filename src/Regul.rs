@@ -131,6 +131,9 @@ impl Regul {
         let outer = Arc::clone(outer);
         let inner = Arc::clone(inner);
         
+        let mut curr_time = Duration::from_secs(0);
+        let interval = Duration::from_secs(outer.get_sampling_time);
+
         let it = ComediDevice::init_device().unwrap();
 
 
@@ -158,13 +161,14 @@ impl Regul {
         Arc::clone(&self.inner);
     }
 
-    fn addP(ang: f32, pos: f32,u: f32,r: f32) {
-        let t = curr_time;
+    fn addP(&self, ang: f32, pos: f32,u: f32,r: f32) {
+        let t = self.curr_time;
         rv.push(Point{
             t,
             vs: [ang,pos,u,r]
         }
         );
+        self.curr_time += self.interval;
     }
 
     pub fn clone_outer(&self) -> Arc<RwLock<PID>> {
