@@ -11,8 +11,8 @@ use std::{
     },thread};
 
 
-pub mod iobox;
 pub mod mode;
+pub mod iobox;
 pub mod pid;
 pub mod regul;
 

@@ -7,11 +7,17 @@
 
 include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 pub mod iobox;
-pub mod sim;
+//pub mod sim;
 pub mod mode;
 pub mod pid;
 pub mod regul;
 
+pub use iobox::ComediDevice;
+pub use iobox::AnalogChannel;
+pub use iobox::AnalogType::{AnalogIn, AnalogOut};
+pub use regul::{Regul, ReferenceGenerator};
+pub use mode:: {Mode, ModeMonitor};
+pub use pid::{PIDparam, PID};
 
 
 #[cfg(test)]
@@ -23,7 +29,8 @@ mod tests {
 
     use std::thread;
     use std::time;
-    
+    use std::sync::{RwLock, Arc};
+    /*
     #[test]
     fn test_virtual_analog() {
        
@@ -38,7 +45,7 @@ mod tests {
         //let read_channel = AnalogChannel::new(AnalogIn(1), dev);
 
 
-        write_chan.write(5000).unwrap();
+        write_chan.write(0.0).unwrap();
 
         //println!("Value read is {}", res);
 
@@ -46,7 +53,32 @@ mod tests {
 
         assert!(true);
         
+    }*/
+
+    #[test]
+    fn test_regul() {
+        let inner = Arc::new(RwLock::new(PID::new()));
+        let outer = Arc::new(RwLock::new(PID::new()));
+        let ref_gen = ReferenceGenerator(0.0);
+        let mut monitor = ModeMonitor::new();
+
+        monitor.set_mode(Mode::BEAM);
+
+
+
+        let regul_thread = thread::Builder::new();
+
+        let handler = regul_thread.spawn(move|| {
+            let mut regul = Regul::new(&outer, monitor,&inner,ref_gen);
+            regul.run();
+        }).unwrap();
+
+        handler.join().unwrap();
+        assert!(true);
+
     }
 
     
 }
+
+
