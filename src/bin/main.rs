@@ -3,7 +3,7 @@
 #![allow(non_snake_case)]
 #![allow(unsafe_code)]
 #![allow(deref_nullptr)]
-include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
+//include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 use std::{
     sync::{
         RwLock,
@@ -11,10 +11,16 @@ use std::{
     },thread};
 
 
-pub mod iobox;
-pub mod mode;
-pub mod pid;
-pub mod regul;
+//pub mod iobox;
+//pub mod mode;
+//pub mod pid;
+//pub mod regul;
+extern crate real_time_project;
+
+use real_time_project::iobox;
+use real_time_project::mode;
+use real_time_project::pid;
+use real_time_project::regul;
 
 
 use iobox::ComediDevice;
@@ -25,6 +31,8 @@ use mode:: {Mode, ModeMonitor};
 use pid::{PIDparam, PID};
 
 pub fn main() {
+    let (tx, rx) = flume::unbounded(); // Channel to send data;
+    let gui_receiver = rx.clone();
     let inner = Arc::new(RwLock::new(PID::new()));
     let outer = Arc::new(RwLock::new(PID::new()));
     let ref_gen = ReferenceGenerator(1.0);
@@ -35,7 +43,7 @@ pub fn main() {
 
 
     thread::spawn(move|| {
-        let mut regul = Regul::new(&outer, monitor,&inner,ref_gen);
+        let mut regul = Regul::new(&outer, monitor.get_ref(),&inner,ref_gen);
         regul.run()
     });
 }

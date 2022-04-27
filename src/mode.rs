@@ -1,4 +1,5 @@
 use std::sync::{Arc, Mutex, Condvar};
+#[derive(PartialEq)]
 pub enum Mode {
     OFF,
     BEAM,
@@ -6,7 +7,7 @@ pub enum Mode {
 }
 
 pub struct ModeMonitor{
-    pub mode: Arc<Mutex<Mode>, Condvar>,
+    pub mode: Arc<(Mutex<Mode>, Condvar)>,
 }
 
 impl ModeMonitor {
@@ -16,16 +17,20 @@ impl ModeMonitor {
         }
     }
 
+    pub fn get_ref(&self) -> &Arc<(Mutex<Mode>, Condvar)> {
+        &self.mode
+    }
+
     pub fn set_mode(&mut self, m: Mode) {
         let (muter, cvar) = &*self.mode;
         let mut muter = muter.lock().unwrap();
         *muter = m;
-        cond.notify_all();
+        cvar.notify_all();
     }
 
-    pub fn get_mode(&mut self) -> Mode {
+    /*pub fn get_mode(&mut self) -> Mode {
         let (muter, _) = &*self.mode;
         return *muter.lock().unwrap();
 
-    }
+    } */
 }

@@ -6,10 +6,11 @@ use std::{ptr, cell::RefCell, rc::Rc};
 use crate::*;
 use std::sync::Once;
 
-const DEV_PATH: &'static str = "/dev/comedi0";
-const MAX_VAL: u32 = 65535;
-const RANGE_1: [f32;2] = [-10.0,10.0];
-const RANGE_2: [f32;2] = [-5.0,5.0];
+
+pub const DEV_PATH: &'static str = "/dev/comedi0";
+pub const MAX_VAL: u32 = 65535;
+pub const RANGE_1: [f32;2] = [-10.0,10.0];
+pub const RANGE_2: [f32;2] = [-5.0,5.0];
 
 
 pub struct ComediDevice {
@@ -50,18 +51,36 @@ pub enum IOError {
     DeviceError
 }
 
+pub fn to_physical(val: u32, max_data_val: u32, range: &[f32;2])-> f32{
+    let ratio = (range[0]-range[1]).abs()/max_data_val as f32;
+    let new_val = ratio*(val as f32) + range[0];
+    return new_val;
+}
+
+pub fn from_physical(val: f32, max_data_val: u32, range: &[f32;2])-> u32{
+    let ratio = max_data_val as f32/(range[0]-range[1]).abs();
+    let new_val = (ratio*(val-range[0])) as u32 ;
+    return new_val;
+
+}
+
 
 impl ComediDevice {
-    pub fn new(subdev: u32, range: u32, aref: u32, init: &Rc<RefCell<*mut comedi_t>>)
+    pub fn new(subdev: u32, range: u32, aref: u32, init: Rc<RefCell<*mut comedi_t>>)
     -> Self {
         let dev = ComediDevice {
             subdev,
             range,
             aref,
-            it: Rc::clone(init),
+            it: init,
         };
         return dev;
     }
+
+    pub fn clone_dev(&self) -> Rc<RefCell<*mut comedi_t>> {
+        Rc::clone(&(self.it))
+    }
+
 
     pub fn init_device() -> Result<Rc<RefCell<*mut comedi_t>>,IOError> {
         unsafe {
@@ -111,30 +130,20 @@ impl AnalogChannel {
         }
 
     }
-    pub fn to_physical(val: u32, max_data_val: u32, range: &[f32;2])-> f32{
-        let ratio = (range[0]-range[1]).abs()/max_data_val as f32;
-        let new_val = ratio*(val as f32) + range[0];
-        return new_val;
-    }
 
-    pub fn from_physical(val: f32, max_data_val: f32, range: &[f32;2])-> u32{
-        let ratio = max_data_val/(range[0]-range[1]).abs();
-        let new_val = (ratio*(val-range[0])) as u32 ;
-        return new_val;
-
-    }
-    pub fn write(&self, val: f32) -> Result<(), IOError> {
+    pub fn write(&self, val: f32) -> Result<u32, IOError> {
         // TODO: write data to iobox
         let mut retval: i32 = 0;
+        let mut w_val: u32 = 0;
         if let AnalogType::AnalogOut( chan) = self._type {
             unsafe {
-                let val = from_physical(val,MAX_VAL,RANGE_1);
-                retval = comedi_data_write(*(*self.dev.it).borrow_mut(), self.dev.subdev, chan, self.dev.range, self.dev.aref, val);
+                w_val = from_physical(val,MAX_VAL,&RANGE_1);
+                retval = comedi_data_write(*(*self.dev.it).borrow_mut(), self.dev.subdev, chan, self.dev.range, self.dev.aref, w_val);
             }
             if  retval < 0 {
                 return Err(IOError::WriteError);
             }
-            return Ok(());
+            return Ok(w_val);
         }
 
         return Err(IOError::ReadOnly);
