@@ -2,25 +2,126 @@
 const UMAX: f32 = 10.0;
 const UMIN: f32 = -10.0;
 
-pub struct ReferenceGenerator(pub f32);
-
-
+pub struct ReferenceGenerator{
+    h: f64,
+    timebase: Time,
+    timeleft: f64,
+    setpoint: f64,
+    new_setpoint: f64,
+    u0: f64,
+    distance: f64,
+    now: f64,
+    t: f64,
+    ts: Time,
+    T: f64,
+    zf: f64,
+    z0: f64,
+    amp: f64,
+    uff: f64,
+    phiff: f64,
+    K_PHI: f64,
+    K_V: f64,
+    period: f64,
+    rmode: RefModeMonitor
+}
 impl ReferenceGenerator {
-    pub fn new(val: f32) -> Self {
-        Self(val)
+    pub fn new(&self, val: f64, set_r_mode: ref_Mode) {
+        self.amp = val;
+        self.h = 10;
+        self.timebase = SystemTime::now();
+        self.timeleft = 0.0;
+        self.setpoint = 0.0;
+        self.new_setpoint; 
+        self.u0 = 0.0; 
+        self.ts = timebase;
+        self.T = 0.0;
+        self.zf = 0.0;
+        self.z0 = 0.0;
+        self.timeleft = 0.0;
+        self.K_PHI = 4.5;
+        self.K_V = 10.0;
+        self.period = 15.0;
+        
+        rmode = RefModeMonitor::new(set_r_mode);
     }
 
-    pub fn get_ref(&self) -> f32 {
-        self.0
+    pub fn get_ref(&mut self) -> f64 {
+        return self.amp;
+    }
+
+    pub fn get_phiff(&self) -> f64 {
+        return self.phiff;
+    }
+    pub fn get_uff(&self) -> f64 {
+        return self.uff;
+    }
+
+    pub fn run(&mut self) {
+
+        match rmode.get_mode(){
+
+        Manual => {
+            setpoint = 0.0;
+            self.amp = setpoint;
+
+        }
+        
+        Square => {
+            timeleft -= self.h;
+            if (timeleft <= 0) {
+                timeleft += (long) (500.0 * self.period);
+                sign = -sign;
+            }
+            new_setpoint = sign * self.amp;
+            setpoint = new_setpoint;
+            self.amp = setpoint;
+        }
+        
+        Optimal => {
+            timeleft -= self.h;
+            if (timeleft <= 0) {
+                timeleft += (long) (500.0 * self.period);
+                sign = -sign;
+            }
+            new_setpoint = sign * self.amp;
+            if (new_setpoint != setpoint){
+                self.ts = SystemTime::now();
+                self.z0 = self.amp;
+                self.zf = new_setpoint;
+                self.distance = zf - z0;
+                self.u0 = distance.signum() * 0.1;
+                self.T = (distance.abs() / (2.0 * K_PHI * K_V * 0.1)).cbrt();
+                self.setpoint = new_setpoint;
+            }
+            if (self.amp != setpoint) {
+                let t = SystemTime::now().duration_since(ts).unwrap().as_secs();	
+                let T = self.T;
+                if (t <= T) {
+                    self.uff = self.u0;
+                    self.phiff = -K_PHI * self.u0 * t;
+                    self.amp = (self.z0 + self.K_PHI * self.K_V * self.u0 * t*t*t/6);
+                } else if (t <= 3.0*self.T) {
+                    self.uff = -self.u0;
+                    self.phiff = self.K_PHI * self.u0 * (t - 2*T);
+                    self.amp = (self.z0 - self.K_PHI * self.K_V * self.u0 * (t*t*t/6 - T*t*t + T*T*t - T*T*T/3));
+                } else if (t <= 4.0*T) {
+                    self.uff = self.u0;
+                    self.phiff = -self.K_PHI * self.u0 * (t - 4*T);
+                    self.amp = (self.z0 + self.K_PHI * self.K_V * self.u0 * (t*t*t/6 - 2*T*t*t + 8*T*T*t - 26*T*T*T/3));
+                } else {
+                    self.uff = 0.0;
+                    self.phiff = 0.0;
+                    self.amp = (setpoint);
+                }
+            }
+        }
+    }    
     }
 }
-
 use std::{
     sync::{
         RwLock,
         Arc,
-        Mutex,
-        Condvar,
     },
     thread,
     time::{SystemTime, Duration},
