@@ -17,6 +17,10 @@ impl ModeMonitor {
         }
     }
 
+    pub fn get_ref(&self) -> &Arc<(Mutex<Mode>, Condvar)> {
+        &self.mode
+    }
+
     pub fn set_mode(&mut self, m: Mode) {
         let (muter, cvar) = &*self.mode;
         let mut muter = muter.lock().unwrap();

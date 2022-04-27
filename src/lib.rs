@@ -12,13 +12,13 @@ pub mod mode;
 pub mod pid;
 pub mod regul;
 
-pub use iobox::ComediDevice;
-pub use iobox::AnalogChannel;
-pub use iobox::AnalogType::{AnalogIn, AnalogOut};
-pub use regul::{Regul, ReferenceGenerator};
-pub use mode:: {Mode, ModeMonitor};
-pub use pid::{PIDparam, PID};
-
+/*pub use crate::iobox::ComediDevice;
+pub use crate::iobox::AnalogChannel;
+pub use crate::iobox::AnalogType::{AnalogIn, AnalogOut};
+pub use crate::regul::{Regul, ReferenceGenerator};
+pub use crate::mode:: {Mode, ModeMonitor};
+pub use crate::pid::{PIDparam, PID};
+*/
 
 #[cfg(test)]
 mod tests {

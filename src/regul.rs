@@ -19,6 +19,8 @@ use std::{
     sync::{
         RwLock,
         Arc,
+        Mutex,
+        Condvar,
     },
     thread,
     time::{SystemTime, Duration},
@@ -36,7 +38,7 @@ use mode::{Mode, ModeMonitor};
 
 pub struct Regul {
     outer: Arc<RwLock<PID>>,
-    mode: ModeMonitor,
+    mode: Arc<(Mutex<Mode>, Condvar)>,
     inner: Arc<RwLock<PID>>,
     ref_gen: ReferenceGenerator,
     analog_pos: AnalogChannel,
@@ -58,8 +60,9 @@ fn limit( u: f32) -> f32 {
 impl Regul {
 
 
-    pub fn new(outer: &Arc<RwLock<PID>>, mode: ModeMonitor, inner: &Arc<RwLock<PID>>,
-    ref_gen: ReferenceGenerator) -> Self {
+    pub fn new(outer: &Arc<RwLock<PID>>, mode: &Arc<(Mutex<Mode>, Condvar)>,
+               inner: &Arc<RwLock<PID>>,ref_gen: ReferenceGenerator)
+        -> Self {
         let outer = Arc::clone(outer);
         let inner = Arc::clone(inner);
         
@@ -76,7 +79,7 @@ impl Regul {
 
         Self {
             outer,
-            mode,
+            mode: Arc::clone(mode),
             inner,
             ref_gen,
             analog_pos,
@@ -99,7 +102,7 @@ impl Regul {
     pub fn run(&mut self) {
         loop {
             let mut t = SystemTime::now();
-            let (lock, cvar) = &*self.mode.mode;
+            let (lock, cvar) = &*self.mode;
             let mut mode_change = lock.lock().unwrap();
             let mut inner = &mut (*self.inner).write().unwrap();
             let mut outer = &mut (*self.outer).write().unwrap();
