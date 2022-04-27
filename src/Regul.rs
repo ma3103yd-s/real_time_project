@@ -6,7 +6,28 @@ const GEN_T_INTERVAL: Time = 20;
 const UMAX: f64 = 10.0;
 const UMIN: f64 = -10.0;
 
-pub struct ReferenceGenerator(f64);
+pub struct ReferenceGenerator{
+    h: f64,
+    timebase: Time,
+    timeleft: f64,
+    setpoint: f64,
+    new_setpoint: f64,
+    u0: f64,
+    disctance: f64,
+    now: f64,
+    t: f64,
+    ts: Time,
+    T: f64,
+    zf: f64,
+    z0: f64,
+    amp: f64,
+    uff: f64,
+    phiff: f64,
+    K_PHI: f64,
+    K_V: f64,
+    period: f64,
+    rmode: RefModeMonitor
+}
 
 
 impl DataSource for Regul{
@@ -19,80 +40,97 @@ impl DataSource for Regul{
 }
 
 impl ReferenceGenerator {
-    pub fn new(val: f64) {
-        Self(val)
+    pub fn new(&self, val: f64, set_r_mode: ref_Mode) {
+        self.amp = val;
+        self.h = 10;
+        self.timebase = SystemTime::now();
+        self.timeleft = 0.0;
+        self.setpoint = 0.0;
+        self.new_setpoint;
+        self.u0 = 0.0; 
+        self.ts = timebase;
+        self.T = 0.0;
+        self.zf = 0.0;
+        self.z0 = 0.0;
+        self.timeleft = 0.0;
+        self.K_PHI = 4.5;
+        self.K_V = 10.0;
+        self.period = 15.0;
+        
+        rmode = RefModeMonitor::new(set_r_mode);
     }
 
-    pub fn get_ref(&self) -> f64 {
-        self.0
+    pub fn get_ref(&mut self) -> f64 {
+        return self.amp;
     }
 
-    pub fn run(&self) {
-        let h = 10;
-        let mut timebase = SystemTime::now();
-        let mut timeleft = 0;
-        let mut duration;
+    pub fn get_phiff(&self) -> f64 {
+        return self.phiff;
+    }
+    pub fn get_uff(&self) -> f64 {
+        return self.uff;
+    }
 
-        let mut setpoint = 0.0;
-        let mut new_setpoint;
-        let mut u0 = 0.0; 
-        let mut distance;
-        let mut now;
-        let mut t;
-        let mut tf = 0.001 * timebase as f32;
-        let mut ts = tf;
-        let mut T = 0.0;
-        let mut zf = 0.0;
-        let mut z0 = 0.0;
+    pub fn run(&mut self) {
 
+        match rmode.get_mode(){
 
+        Manual => {
+            setpoint = 0.0;
+            self.amp = setpoint;
 
-        let mut timeleft = 0;
-        loop{
-            now = 0.001 * timebase as f32;
+        }
+        
+        Square => {
             timeleft -= self.h;
             if (timeleft <= 0) {
                 timeleft += (long) (500.0 * self.period);
+                sign = -sign;
             }
-            new_setpoint = -get_ref();
-            ts = now;
-            z0 = get_ref();
-            zf = new_setpoint;
-            distance = zf - z0;
-            u0 = Math.signum(distance) * max_ctrl;
-            T = Math.cbrt(Math.abs(distance) / (2.0 * K_PHI * K_V * max_ctrl));
-            tf = ts + 4.0 * T;
+            new_setpoint = sign * self.amp;
             setpoint = new_setpoint;
-
-
-            if (get_ref() != setpoint) {
-                t = now - ts;	
+            self.amp = setpoint;
+        }
+        
+        Optimal => {
+            timeleft -= self.h;
+            if (timeleft <= 0) {
+                timeleft += (long) (500.0 * self.period);
+                sign = -sign;
+            }
+            new_setpoint = sign * self.amp;
+            if (new_setpoint != setpoint){
+                self.ts = SystemTime::now();
+                self.z0 = self.amp;
+                self.zf = new_setpoint;
+                self.distance = zf - z0;
+                self.u0 = distance.signum() * 0.1;
+                self.T = (distance.abs() / (2.0 * K_PHI * K_V * 0.1)).cbrt();
+                self.setpoint = new_setpoint;
+            }
+            if (self.amp != setpoint) {
+                let t = SystemTime::now().duration_since(ts).unwrap().as_secs();	
+                let T = self.T;
                 if (t <= T) {
-                    uff = u0;
-                    phiff = -K_PHI * u0 * t;
-                    new(z0 + K_PHI * K_V * u0 * t*t*t/6);
-                } else if (t <= 3.0*T) {
-                    uff = -u0;
-                    phiff = K_PHI * u0 * (t - 2*T);
-                    new(z0 - K_PHI * K_V * u0 * (t*t*t/6 - T*t*t + T*T*t - T*T*T/3));
+                    self.uff = self.u0;
+                    self.phiff = -K_PHI * self.u0 * t;
+                    self.amp = (self.z0 + self.K_PHI * self.K_V * self.u0 * t*t*t/6);
+                } else if (t <= 3.0*self.T) {
+                    self.uff = -self.u0;
+                    self.phiff = self.K_PHI * self.u0 * (t - 2*T);
+                    self.amp = (self.z0 - self.K_PHI * self.K_V * self.u0 * (t*t*t/6 - T*t*t + T*T*t - T*T*T/3));
                 } else if (t <= 4.0*T) {
-                    uff = u0;
-                    phiff = -K_PHI * u0 * (t - 4*T);
-                    new(z0 + K_PHI * K_V * u0 * (t*t*t/6 - 2*T*t*t + 8*T*T*t - 26*T*T*T/3));
+                    self.uff = self.u0;
+                    self.phiff = -self.K_PHI * self.u0 * (t - 4*T);
+                    self.amp = (self.z0 + self.K_PHI * self.K_V * self.u0 * (t*t*t/6 - 2*T*t*t + 8*T*T*t - 26*T*T*T/3));
                 } else {
-                    uff = 0.0;
-                    phiff = 0.0;
-                    new(setpoint);
+                    self.uff = 0.0;
+                    self.phiff = 0.0;
+                    self.amp = (setpoint);
                 }
             }
-
-
-            timebase += h;
-            duration = timebase - SystemTime::now();
-            if (duration > 0) {
-                sleep(duration);			
-            }
         }
+    }    
     }
 }
 
