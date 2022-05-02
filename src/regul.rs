@@ -1,4 +1,4 @@
-
+use std::time::{SystemTime, Duration};
 const UMAX: f32 = 10.0;
 const UMIN: f32 = -10.0;
 
@@ -22,18 +22,19 @@ pub struct ReferenceGenerator{
     K_PHI: f64,
     K_V: f64,
     period: f64,
-    rmode: RefModeMonitor
+    rmode: RefModeMonitor,
+    sign: f64
 }
 impl ReferenceGenerator {
     pub fn new(&self, val: f64, set_r_mode: ref_Mode) {
         self.amp = val;
-        self.h = 10;
+        self.h = 10.0;
         self.timebase = SystemTime::now();
         self.timeleft = 0.0;
         self.setpoint = 0.0;
-        self.new_setpoint; 
-        self.u0 = 0.0; 
-        self.ts = timebase;
+        self.new_setpoint;
+        self.u0 = 0.0;
+        self.ts = self.timebase;
         self.T = 0.0;
         self.zf = 0.0;
         self.z0 = 0.0;
@@ -41,8 +42,9 @@ impl ReferenceGenerator {
         self.K_PHI = 4.5;
         self.K_V = 10.0;
         self.period = 15.0;
-        
-        rmode = RefModeMonitor::new(set_r_mode);
+        self.sign = 1.0;
+
+        self.rmode = RefModeMonitor::new(set_r_mode);
     }
 
     pub fn get_ref(&mut self) -> f64 {
@@ -58,73 +60,74 @@ impl ReferenceGenerator {
 
     pub fn run(&mut self) {
 
-        match rmode.get_mode(){
+        match self.rmode.get_mode(){
 
         Manual => {
-            setpoint = 0.0;
-            self.amp = setpoint;
+            self.setpoint = 0.0;
+            self.amp = self.setpoint;
 
         }
-        
+
         Square => {
-            timeleft -= self.h;
-            if (timeleft <= 0) {
-                timeleft += (long) (500.0 * self.period);
-                sign = -sign;
+            self.timeleft -= self.h;
+            if self.timeleft <= 0.0 {
+                self.timeleft += 500.0 * self.period;
+                self.sign = -self.sign;
             }
-            new_setpoint = sign * self.amp;
-            setpoint = new_setpoint;
-            self.amp = setpoint;
+            self.new_setpoint = self.sign * self.amp;
+            self.setpoint = self.new_setpoint;
+            self.amp = self.setpoint;
         }
-        
+
         Optimal => {
-            timeleft -= self.h;
-            if (timeleft <= 0) {
-                timeleft += (long) (500.0 * self.period);
-                sign = -sign;
+            self.timeleft -= self.h;
+            if self.timeleft <= 0.0 {
+                self.timeleft += 500.0 * self.period;
+                self.sign = -self.sign;
             }
-            new_setpoint = sign * self.amp;
-            if (new_setpoint != setpoint){
+            self.new_setpoint = self.sign * self.amp;
+            if self.new_setpoint != self.setpoint{
                 self.ts = SystemTime::now();
                 self.z0 = self.amp;
-                self.zf = new_setpoint;
-                self.distance = zf - z0;
-                self.u0 = distance.signum() * 0.1;
-                self.T = (distance.abs() / (2.0 * K_PHI * K_V * 0.1)).cbrt();
-                self.setpoint = new_setpoint;
+                self.zf = self.new_setpoint;
+                self.distance = self.zf - self.z0;
+                self.u0 = self.distance.signum() * 0.1;
+                self.T = (self.distance.abs() / (2.0 * self.K_PHI * self.K_V * 0.1)).cbrt();
+                self.setpoint = self.new_setpoint;
             }
-            if (self.amp != setpoint) {
-                let t = SystemTime::now().duration_since(ts).unwrap().as_secs();	
+            if self.amp != self.setpoint {
+                let t = SystemTime::now().duration_since(self.ts).unwrap().as_secs() as f64;
                 let T = self.T;
-                if (t <= T) {
+                if t <= T {
                     self.uff = self.u0;
-                    self.phiff = -K_PHI * self.u0 * t;
-                    self.amp = (self.z0 + self.K_PHI * self.K_V * self.u0 * t*t*t/6);
-                } else if (t <= 3.0*self.T) {
+                    self.phiff = -self.K_PHI * self.u0 * t;
+                    self.amp = self.z0 + self.K_PHI * self.K_V * self.u0 * t*t*t/6.0;
+                } else if t <= 3.0*self.T {
                     self.uff = -self.u0;
-                    self.phiff = self.K_PHI * self.u0 * (t - 2*T);
-                    self.amp = (self.z0 - self.K_PHI * self.K_V * self.u0 * (t*t*t/6 - T*t*t + T*T*t - T*T*T/3));
-                } else if (t <= 4.0*T) {
+                    self.phiff = self.K_PHI * self.u0 * (t - 2.0*T);
+                    self.amp = self.z0 - self.K_PHI * self.K_V * self.u0 * (t*t*t/6.0 - T*t*t + T*T*t - T*T*T/3.0);
+                } else if t <= 4.0*T {
                     self.uff = self.u0;
-                    self.phiff = -self.K_PHI * self.u0 * (t - 4*T);
-                    self.amp = (self.z0 + self.K_PHI * self.K_V * self.u0 * (t*t*t/6 - 2*T*t*t + 8*T*T*t - 26*T*T*T/3));
+                    self.phiff = -self.K_PHI * self.u0 * (t - 4.0*T);
+                    self.amp = self.z0 + self.K_PHI * self.K_V * self.u0 * (t*t*t/6.0 - 2.0*T*t*t + 8.0*T*T*t - 26.0*T*T*T/3.0);
                 } else {
                     self.uff = 0.0;
                     self.phiff = 0.0;
-                    self.amp = (setpoint);
+                    self.amp = self.setpoint;
                 }
             }
         }
-    }    
+    }
     }
 }
 use std::{
     sync::{
         RwLock,
         Arc,
+        Condvar,
+        Mutex
     },
     thread,
-    time::{SystemTime, Duration},
 };
 
 use pid::PID;
@@ -149,14 +152,14 @@ pub struct Regul {
 
 
 fn limit( u: f32) -> f32 {
-    if (u < UMIN) {
+    if u < UMIN {
         return UMIN;
-    } else if (u > UMAX) {
+    } else if u > UMAX {
         return UMAX;
     }
     return u;
 }
- 
+
 
 impl Regul {
 
@@ -166,7 +169,7 @@ impl Regul {
         -> Self {
         let outer = Arc::clone(outer);
         let inner = Arc::clone(inner);
-        
+
         let it = ComediDevice::init_device().unwrap();
 
 
@@ -187,7 +190,7 @@ impl Regul {
             analog_angle,
             analog_out,
         }
-        
+
     }
 
     pub fn clone_inner(&self) -> Arc<RwLock<PID>> {
@@ -198,7 +201,7 @@ impl Regul {
         Arc::clone(&self.outer)
     }
 
-   
+
 
     pub fn run(&mut self) {
         loop {
@@ -210,10 +213,10 @@ impl Regul {
             match *mode_change {
                 Mode::OFF => {
                     self.analog_out.write(0.0);
-                    while(*mode_change == Mode::OFF){
+                    while *mode_change == Mode::OFF{
                         mode_change = cvar.wait(mode_change).unwrap();
                     }
-                    
+
                 },
 
                 Mode::BEAM => {
@@ -238,24 +241,24 @@ impl Regul {
                 },
 
                  Mode::BALL => {
-                    
 
 
-                
+
+
                     let y0 = self.analog_pos.read().unwrap();
                     let yref = self.ref_gen.get_ref();
                     let phiFF = 0.0;//ref_gen.getPhiFF();
                     let uFF = 0.0;//ref_gen.getUff();
 
                     //Synchronize Outer
-                    
+
                     let vO = outer.calculate_output(y0, yref) + phiFF;
                     let uO = limit(vO);
                     outer.update_state(uO-phiFF);
-                    
+
 
                     //Synchronize Inner
-                    
+
                     let yI = self.analog_angle.read().unwrap();
                     let vI = inner.calculate_output(yI, uO) + uFF;
                     let uI = limit(vI);
@@ -264,10 +267,10 @@ impl Regul {
                     println!("yref is {}", yref);
                     inner.update_state(uI-uFF);
                     self.analog_out.write(uI);
-                        
+
                         //analog_ref.set(refGen.getRef());
 
-                     
+
                 },
             };
 
