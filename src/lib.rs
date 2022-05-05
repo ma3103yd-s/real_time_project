@@ -6,11 +6,17 @@
 #![allow(deref_nullptr)]
 
 include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
+extern crate rand;
+extern crate tui;
+extern crate crossterm;
+
 pub mod iobox;
 //pub mod sim;
 pub mod mode;
 pub mod pid;
 pub mod regul;
+pub mod ref_mode;
+pub mod ui;
 
 /*pub use crate::iobox::ComediDevice;
 pub use crate::iobox::AnalogChannel;
@@ -83,7 +89,7 @@ mod tests {
 
 
         let handler = regul_thread.spawn(move|| {
-            let mut regul = Regul::new(&outer, monitor,&inner,ref_gen);
+            let mut regul = Regul::new(&outer, monitor.get_ref(), &inner,ref_gen);
             regul.run();
         }).unwrap();
 

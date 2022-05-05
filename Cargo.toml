@@ -6,7 +6,10 @@ version = "0.1.0"
 
 [dependencies]
 lazy_static = "*"
-flume = "*"
+#flume = "*"
+tui = "*"
+rand = "*"
+crossterm = "*"
 
 
 [build-dependencies]

@@ -1,5 +1,5 @@
 use std::sync::{Arc, Mutex, Condvar};
-#[derive(PartialEq)]
+#[derive(PartialEq, Clone, Copy)]
 pub enum Mode {
     OFF,
     BEAM,

@@ -1,13 +1,13 @@
 #[derive(Debug, Clone, Copy)]
 pub struct PIDparam {
-    K: f32,
-    Ti: f32,
-    Td: f32,
-    Tr: f32,
-    N: f32,
-    Beta: f32,
-    H: f32,
-    integrator_on: bool,
+    pub K: f32,
+    pub Ti: f32,
+    pub Td: f32,
+    pub Tr: f32,
+    pub N: f32,
+    pub Beta: f32,
+    pub H: f32,
+    pub integrator_on: bool,
 
 }
 
@@ -44,7 +44,7 @@ pub struct PID{
 
 impl PID{
     pub fn new() -> Self {
-        let p = PIDparam::new(-0.1, 0.0, 0.1, 1.0, 5.0, 1.0, 0.1, false);
+        let p = PIDparam::new(-0.1, 0.0, 0.5, 1.0, 5.0, 1.0, 0.1, false);
         let mut temp  = Self {
             p,
             v: 0.0,
@@ -66,7 +66,7 @@ impl PID{
     pub fn calculate_output(&mut self, y: f32, yref: f32) -> f32 {
         self.ynew = y;
         self.e = yref - y;
-        self.D = self.ad*self.D - self.bd*(y - self.yold);
+        self.D = self.ad*self.D - self.bd*(self.e - self.eold);
         self.v = self.p.K*(self.p.Beta*yref - y) + self.I + self.D;     
         return self.v;
     }
@@ -93,6 +93,10 @@ impl PID{
         }
         self.ad = self.p.Td/(self.p.Td + self.p.N * self.p.H);
         self.bd = self.p.K*self.p.Td*self.p.N/(self.p.Td + self.p.N * self.p.H);
+    }
+
+    pub fn get_params(&self) -> PIDparam {
+        self.p
     }
 
     pub fn with_parameters(mut self, params: PIDparam) -> Self {

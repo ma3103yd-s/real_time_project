@@ -1,32 +1,62 @@
 use std::time::{SystemTime, Duration};
+use ref_mode::{RefModeMonitor, RefMode};
 const UMAX: f32 = 10.0;
 const UMIN: f32 = -10.0;
 
 pub struct ReferenceGenerator{
-    h: f64,
-    timebase: Time,
-    timeleft: f64,
-    setpoint: f64,
-    new_setpoint: f64,
-    u0: f64,
-    distance: f64,
-    now: f64,
-    t: f64,
-    ts: Time,
-    T: f64,
-    zf: f64,
-    z0: f64,
-    amp: f64,
-    uff: f64,
-    phiff: f64,
-    K_PHI: f64,
-    K_V: f64,
-    period: f64,
+    h: f32,
+    timebase: SystemTime,
+    last_time: SystemTime,
+    setpoint: f32,
+    new_setpoint: f32,
+    u0: f32,
+    distance: f32,
+    now: f32,
+    t: f32,
+    ts: SystemTime,
+    T: f32,
+    zf: f32,
+    z0: f32,
+    amp: f32,
+    uff: f32,
+    phiff: f32,
+    K_PHI: f32,
+    K_V: f32,
+    period: f32,
     rmode: RefModeMonitor,
-    sign: f64
+    sign: f32
 }
 impl ReferenceGenerator {
-    pub fn new(&self, val: f64, set_r_mode: ref_Mode) {
+
+    pub fn new(val: f32, rmode: RefModeMonitor) -> Self {
+        
+        Self {
+            h: 10.0,
+            timebase: SystemTime::now(),
+            last_time: SystemTime::now(),
+            setpoint: 0.0,
+            new_setpoint: 0.0,
+            distance: 0.0,
+            t: 0.0,
+            now: 0.0,
+            u0: 0.0,
+            ts: SystemTime::now(),
+            T: 0.0,
+            zf: 0.0,
+            z0: 0.0,
+            amp: val,
+            uff: 0.0,
+            phiff: 0.0,
+            K_PHI: 4.5,
+            K_V: 10.0,
+            period: 10.0,
+            sign: 1.0,
+            rmode,        
+        }
+
+    }
+
+    /*pub fn new(&self, val: f64, set_r_mode: ref_Mode) {
         self.amp = val;
         self.h = 10.0;
         self.timebase = SystemTime::now();
@@ -45,47 +75,64 @@ impl ReferenceGenerator {
         self.sign = 1.0;
 
         self.rmode = RefModeMonitor::new(set_r_mode);
+    }*/
+
+    pub fn get_ref(&mut self) -> f32 {
+        return self.amp*self.sign;
     }
 
-    pub fn get_ref(&mut self) -> f64 {
+    pub fn get_amp(&self) -> f32 {
         return self.amp;
     }
 
-    pub fn get_phiff(&self) -> f64 {
+    pub fn set_amp(&mut self, val: f32) {
+        self.amp = val;
+    }
+
+    pub fn get_phiff(&self) -> f32 {
         return self.phiff;
     }
-    pub fn get_uff(&self) -> f64 {
+    pub fn get_uff(&self) -> f32 {
         return self.uff;
     }
 
     pub fn run(&mut self) {
 
-        match self.rmode.get_mode(){
+        let (lock, cvar) = &*self.rmode.mode;
+        let mut mode_change = lock.lock().unwrap();
+        match *mode_change {
 
-        Manual => {
-            self.setpoint = 0.0;
-            self.amp = self.setpoint;
 
-        }
 
-        Square => {
-            self.timeleft -= self.h;
-            if self.timeleft <= 0.0 {
-                self.timeleft += 500.0 * self.period;
+        RefMode::MANUAL => {
+            //self.setpoint = 0.0;
+            //self.amp = self.setpoint;
+
+        },
+
+        RefMode::SQUARE => {
+            let now = SystemTime::now();
+            if  now.duration_since(self.last_time).unwrap_or(Duration::ZERO).as_secs_f32() > self.period  {
+                self.last_time = now;
                 self.sign = -self.sign;
             }
+
             self.new_setpoint = self.sign * self.amp;
             self.setpoint = self.new_setpoint;
-            self.amp = self.setpoint;
-        }
 
-        Optimal => {
-            self.timeleft -= self.h;
-            if self.timeleft <= 0.0 {
-                self.timeleft += 500.0 * self.period;
+            //self.amp = self.setpoint;
+        },
+
+        RefMode::OPTIMAL => {
+            let now = SystemTime::now();
+            if  now.duration_since(self.last_time).unwrap_or(Duration::ZERO).as_secs_f32() > self.period  {
+                self.last_time = now;
                 self.sign = -self.sign;
             }
+
             self.new_setpoint = self.sign * self.amp;
+
+
             if self.new_setpoint != self.setpoint{
                 self.ts = SystemTime::now();
                 self.z0 = self.amp;
@@ -96,7 +143,7 @@ impl ReferenceGenerator {
                 self.setpoint = self.new_setpoint;
             }
             if self.amp != self.setpoint {
-                let t = SystemTime::now().duration_since(self.ts).unwrap().as_secs() as f64;
+                let t = SystemTime::now().duration_since(self.ts).unwrap().as_secs_f32();
                 let T = self.T;
                 if t <= T {
                     self.uff = self.u0;
@@ -125,7 +172,8 @@ use std::{
         RwLock,
         Arc,
         Condvar,
-        Mutex
+        Mutex,
+        mpsc,
     },
     thread,
 };
@@ -144,10 +192,11 @@ pub struct Regul {
     outer: Arc<RwLock<PID>>,
     mode: Arc<(Mutex<Mode>, Condvar)>,
     inner: Arc<RwLock<PID>>,
-    ref_gen: ReferenceGenerator,
+    ref_gen: Arc<RwLock<ReferenceGenerator>>,
     analog_pos: AnalogChannel,
     analog_angle: AnalogChannel,
     analog_out: AnalogChannel,
+    tx: mpsc::Sender<f64>,
 }
 
 
@@ -164,12 +213,10 @@ fn limit( u: f32) -> f32 {
 impl Regul {
 
 
-    pub fn new(outer: &Arc<RwLock<PID>>, mode: &Arc<(Mutex<Mode>, Condvar)>,
-               inner: &Arc<RwLock<PID>>,ref_gen: ReferenceGenerator)
+    pub fn new(outer: Arc<RwLock<PID>>, mode: Arc<(Mutex<Mode>, Condvar)>,
+               inner: Arc<RwLock<PID>>,ref_gen: Arc<RwLock<ReferenceGenerator>>,
+               tx: mpsc::Sender<f64>)
         -> Self {
-        let outer = Arc::clone(outer);
-        let inner = Arc::clone(inner);
-
         let it = ComediDevice::init_device().unwrap();
 
 
@@ -183,12 +230,13 @@ impl Regul {
 
         Self {
             outer,
-            mode: Arc::clone(mode),
+            mode,
             inner,
             ref_gen,
             analog_pos,
             analog_angle,
             analog_out,
+            tx,
         }
 
     }
@@ -204,85 +252,95 @@ impl Regul {
 
 
     pub fn run(&mut self) {
+        let mut is_sat: bool = false;
         loop {
             let mut t = SystemTime::now();
-            let (lock, cvar) = &*self.mode;
-            let mut mode_change = lock.lock().unwrap();
-            let mut inner = &mut (*self.inner).write().unwrap();
-            let mut outer = &mut (*self.outer).write().unwrap();
-            match *mode_change {
-                Mode::OFF => {
-                    self.analog_out.write(0.0);
-                    while *mode_change == Mode::OFF{
-                        mode_change = cvar.wait(mode_change).unwrap();
-                    }
+            let mut _H = 0.0;
+            {
+                let (lock, cvar) = &*self.mode;
+                let mut mode_change = lock.lock().unwrap();
+                let mut inner = &mut (*self.inner).write().unwrap();
+                let mut outer = &mut (*self.outer).write().unwrap();
 
-                },
+                _H = inner.get_sampling_time();
 
-                Mode::BEAM => {
-                    let y = self.analog_angle.read().unwrap(); // Handle result later
+                let mut ref_gen = &mut (*self.ref_gen).write().unwrap();
+                ref_gen.run();
+                match *mode_change {
+                    Mode::OFF => {
+                        self.analog_out.write(0.0);
+                        while *mode_change == Mode::OFF {
+                            mode_change = cvar.wait(mode_change).unwrap();
+                        }
 
-                    let yRef = self.ref_gen.get_ref();
-                    println!("yref is {}", yRef);
+                    },
 
-                    //Synchronize inner
-                    //let mut inner = &mut (*self.inner).write().unwrap();
-                    let u = limit(inner.calculate_output(y, yRef));
-                    //println!("y is {}", y);
-                    //println!("u is {}", u);
-                    let w_val = self.analog_out.write(u).unwrap();
-                    //println!("Value written is {}", w_val);
-                    inner.update_state(u);
+                    Mode::BEAM => {
+                        let y = self.analog_angle.read().unwrap(); // Handle result later
 
+                        let yRef = ref_gen.get_ref();
+                        //println!("yref is {}", yRef);
 
-
-
-
-                },
-
-                 Mode::BALL => {
-
-
+                        //Synchronize inner
+                        //let mut inner = &mut (*self.inner).write().unwrap();
+                        let u = limit(inner.calculate_output(y, yRef));
+                        //println!("y is {}", y);
+                        //println!("u is {}", u);
+                        let w_val = self.analog_out.write(u).unwrap();
+                        //println!("Value written is {}", w_val);
+                        inner.update_state(u);
+                        self.tx.send(u as f64).ok();
 
 
-                    let y0 = self.analog_pos.read().unwrap();
-                    let yref = self.ref_gen.get_ref();
-                    let phiFF = 0.0;//ref_gen.getPhiFF();
-                    let uFF = 0.0;//ref_gen.getUff();
 
-                    //Synchronize Outer
+                    },
 
-                    let vO = outer.calculate_output(y0, yref) + phiFF;
-                    let uO = limit(vO);
-                    outer.update_state(uO-phiFF);
+                    Mode::BALL => {
+        
+                        let y0 = self.analog_pos.read().unwrap();
+                        let yref = ref_gen.get_ref();
+                        let phiFF = ref_gen.get_phiff();
+                        let uFF = ref_gen.get_uff();
 
+                        let yI = self.analog_angle.read().unwrap();
 
-                    //Synchronize Inner
+                        //Synchronize Outer
 
-                    let yI = self.analog_angle.read().unwrap();
-                    let vI = inner.calculate_output(yI, uO) + uFF;
-                    let uI = limit(vI);
-                    println!("pos is {}", y0);
-                    println!("u is {}", uI);
-                    println!("yref is {}", yref);
-                    inner.update_state(uI-uFF);
-                    self.analog_out.write(uI);
-
-                        //analog_ref.set(refGen.getRef());
+                        let vO = outer.calculate_output(y0, yref) + phiFF;
+                        let uO = limit(vO);               
+                        if (!is_sat) {
+                            outer.update_state(uO-phiFF);
+                        } else {
+                            outer.update_state(yI-phiFF);
+                        }
 
 
-                },
-            };
+                        //Synchronize Inner
 
-            t = t + Duration::from_millis(inner.get_sampling_time() as u64);
+
+                        let vI = inner.calculate_output(yI, uO) + uFF;
+                        let uI = limit(vI);
+                        is_sat = uI == UMIN || uI == UMAX;
+                        //println!("pos is {}", y0);
+                        //println!("u is {}", uI);
+                        //println!("yref is {}", yref);
+                        inner.update_state(uI-uFF);
+                        self.analog_out.write(uI);
+                        self.tx.send(uI as f64).ok();
+
+                            //analog_ref.set(refGen.getRef());
+
+
+                    },
+                };
+            }
+            t = t + Duration::from_millis(_H as u64);
             let duration = t.duration_since(SystemTime::now());
 
             if let Ok(duration) = duration {
-                println!("Duration is {:?}", duration);
+                //println!("Duration is {:?}", duration);
                 thread::sleep(duration);
             }
-
-
 
         };
     }
