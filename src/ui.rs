@@ -4,7 +4,7 @@ extern crate tui;
 
 const MAX_AMP: f32 = 5.0;
 use rand::random;
-use std::{io, thread::{self, }, time::{Duration, Instant}, sync::{Mutex, Condvar, mpsc::TryIter}};
+use std::{io, thread::{self, }, time::{Duration, Instant}, sync::{Mutex, Condvar, mpsc::TryIter}, os::unix::prelude::MetadataExt};
 use std::error::Error;
 use tui::{
     Frame,
@@ -12,7 +12,7 @@ use tui::{
     style::{Color,Style, Modifier},
     backend::{Backend, CrosstermBackend},
     widgets::{Widget, Block, Borders, Cell,
-        Row, Table, TableState, Axis, List, ListItem, ListState, GraphType, Dataset, Chart, LineGauge, Gauge},
+        Row, Table, TableState, Axis, List, ListItem, ListState, GraphType, Dataset, Chart, LineGauge, Gauge, canvas::{Rectangle, Line, Canvas, Map, MapResolution}},
     layout::{Rect, Layout, Constraint, Direction},
     Terminal, symbols
 };
@@ -29,6 +29,124 @@ use regul::ReferenceGenerator;
 use mode::{Mode};
 use ref_mode::{RefMode};
 
+pub struct BeamCanvas {
+    ball_pos: (f64, f64),
+    beam_angle: f32,
+    angle_recv: mpsc::Receiver<f32>,
+    pos_recv: mpsc::Receiver<f32>,
+    length: f64,
+    coords: [(f64, f64);4],
+    shapes: (Vec<Line>, Rectangle)
+
+}
+
+impl BeamCanvas {
+    pub fn new(angle_recv: mpsc::Receiver<f32>,
+        pos_recv: mpsc::Receiver<f32>, length: f64) -> Self {
+            let coords = [
+                (-0.5*length, -10.0),
+                (-0.5*length, 10.0),
+                (0.5*length, -10.0),
+                (0.5*length, 10.0),
+                ];
+            let shapes = Self::to_shapes(coords, (0.0, 0.0));
+            Self {
+                ball_pos: (0.0, 0.0),
+                beam_angle: 0.0,
+                angle_recv,
+                pos_recv,
+                coords,
+                length,
+                shapes,
+                
+            }
+        }
+
+    fn to_shapes(coords: [(f64, f64);4],
+    ball_pos: (f64, f64)) -> (Vec<Line>, Rectangle) {
+        let line_1 = Line {
+            x1: coords[0].0,
+            y1: coords[0].1,
+            x2: coords[1].0,
+            y2: coords[1].1,
+            color: Color::White,
+        };
+        let line_2 = Line {
+            x1: coords[0].0,
+            y1: coords[0].1,
+            x2: coords[2].0,
+            y2: coords[2].1,
+            color: Color::White,
+
+        };
+
+        let line_3 = Line {
+            x1: coords[2].0,
+            y1: coords[2].1,
+            x2: coords[3].0,
+            y2: coords[3].1,
+            color: Color::White,
+
+        };
+
+        let line_4 = Line {
+            x1: coords[3].0,
+            y1: coords[3].1,
+            x2: coords[4].0,
+            y2: coords[4].1,
+            color: Color::White,
+
+        };
+
+        let rect= Rectangle {
+            x: ball_pos.0 as f64,
+            y: ball_pos.1 as f64,
+            width: 2.0,
+            height: 2.0,
+            color: Color::White,
+
+        };
+
+        (vec![line_1, line_2, line_3, line_4], rect)
+    }
+
+    pub fn on_tick(&mut self) {
+        let new_pos = self.pos_recv.recv().unwrap();
+        let new_angle = self.angle_recv.recv().unwrap();
+        self.beam_angle = new_angle;
+        self.to_beam();
+        let ball_pos = (new_pos.cos() as f64, new_pos.sin() as f64);
+        self.ball_pos = ball_pos;
+        self.shapes = Self::to_shapes(self.coords, self.ball_pos);
+
+    }
+
+    fn to_beam(&mut self) {
+        let new_x = self.length*self.beam_angle.cos() as f64;
+        let new_y = self.length*self.beam_angle.sin() as f64;
+        self.coords[0] = (-new_x, -new_y);
+        self.coords[1] = (-new_x, new_y);
+        self.coords[2] = (new_x, -new_y);
+        self.coords[3] = (new_x, new_y);
+   
+    }
+}
+#[derive(PartialEq, Eq)]
+enum TabIndex {
+    First,
+    Second,
+}
+
+impl TabIndex {
+    pub fn next(&mut self) {
+        *self = match *self {
+            TabIndex::First => TabIndex::Second,
+            TabIndex::Second => TabIndex::First,
+            
+        }
+    }
+}
+
 pub struct App<S: Iterator> {
     regul: Arc<RwLock<PID>>,
     ref_gen: Arc<RwLock<ReferenceGenerator>>,
@@ -40,12 +158,14 @@ pub struct App<S: Iterator> {
     selection: SelectionMode,
     signal: PlotSignal<S>,
     reference_area: Option<Rect>,
+    canvas: BeamCanvas,
+    index: TabIndex,
 }
 
 impl App<ControllerSignal> {
     pub fn new(regul: Arc<RwLock<PID>>, ref_gen: Arc<RwLock<ReferenceGenerator>>,
         mode: Arc<(Mutex<Mode>, Condvar)>, ref_mode: Arc<(Mutex<RefMode>, Condvar)>, 
-        recv: mpsc::Receiver<f64>, tick_rate: usize) -> Self {
+        recv: mpsc::Receiver<f64>, tick_rate: usize, canvas: BeamCanvas) -> Self {
         let regul_lock = (*regul).read().unwrap();
         let ref_gen_lock = (*ref_gen).read().unwrap();
         let pid_params = (*regul_lock).get_params();
@@ -83,6 +203,8 @@ impl App<ControllerSignal> {
             selection,
             signal,
             reference_area: None,
+            canvas,
+            index: TabIndex::First,
         }
 
     }
@@ -610,6 +732,70 @@ fn get_parameter_string(params: &mut ParameterData) -> String {
 }
 
 
+fn draw_first_tab<B, S>(f: &mut Frame<B>, app: &mut App<S>, area: Rect)
+    where B: Backend, S: Iterator<Item = (f64, f64)>
+{
+
+     let main_chunks = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Percentage(30), Constraint::Min(0)].as_ref())
+        .split(area);
+    let left_chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(5), Constraint::Min(0)].as_ref())
+        .split(main_chunks[0]);
+    let right_chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(5), Constraint::Min(0)].as_ref())
+        .split(main_chunks[1]);
+    let ref_list_chunks = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Length(20), Constraint::Min(0)].as_ref())
+        .split(right_chunks[0]);
+    draw_parameter_table(f, &mut app.params, &mut app.controller_data, left_chunks[1]);
+    draw_mode_list(f, &mut app.mode, left_chunks[0]);
+    draw_chart(f, &mut app.signal, right_chunks[1]);
+    draw_ref_mode_list(f, &mut app.ref_mode, ref_list_chunks[0]);
+    draw_reference_bar(f, app, ref_list_chunks[1]);
+    match app.input_mode {
+        InputMode::Normal => {},
+        InputMode::Editing => {
+            if let Some(ind) = app.params.selected() {
+                f.set_cursor(
+                    left_chunks[1].left() + 20 + app.params.items[ind][1].len() as u16 + 4,
+                    left_chunks[1].top() + 1 + ind as u16,
+                )
+            }
+
+        },
+        InputMode::Quit => {},
+        
+    }
+}
+
+fn draw_second_tab<B, S>(f: &mut Frame<B>, app: &mut App<S>, area: Rect)
+where B: Backend, S: Iterator
+{
+    let c = Canvas::default()
+    .block(Block::default().title("Beam").borders(Borders::ALL))
+    .x_bounds([-70.0, 70.0])
+    .y_bounds([-50.0, 50.0])
+    .paint(|ctx| {
+        ctx.draw(&Map {
+            resolution: MapResolution::High,
+            color: Color::Black,
+        });
+        ctx.layer();
+        for line in app.canvas.shapes.0.iter() {
+            ctx.draw(line);
+        }
+        ctx.draw(&app.canvas.shapes.1);
+
+    });
+    f.render_widget(c, area);
+
+}
+
 fn ui<B, S>(f: &mut Frame<B>, app: &mut App<S>)
 where B: Backend,
       S: Iterator<Item = (f64, f64)>
@@ -733,8 +919,8 @@ fn on_key<S: Iterator>(app: &mut App<S>, key: KeyCode) {
                     app.selection.next();
                 }
             }
-            if key == KeyCode::Char('q') {
-                app.input_mode = InputMode::Quit;
+            if key == KeyCode::Tab {
+                app.index.next();
                 return;
             }
             
@@ -800,7 +986,17 @@ fn on_input<S: Iterator>(app: &mut App<S>) -> io::Result<()> {
 
     match read()? {
         Event::Mouse(event) => on_mouse(app, event),//app.controller_data.set_amplitude(0.5),
-        Event::Key(event) => on_key(app, event.code),
+        Event::Key(event) => {
+            if app.index == TabIndex::First {
+                on_key(app, event.code);
+            } else {
+                if event.code == KeyCode::Char('q') {
+                    app.input_mode = InputMode::Quit;
+                } else if event.code == KeyCode::Tab {
+                    app.index.next();
+                }
+            }
+        },
         _ => (),
     }
     Ok(())
@@ -826,6 +1022,7 @@ fn run_app<B: Backend, S: Iterator<Item = (f64, f64)>> (terminal: &mut Terminal<
         }
         if last_tick.elapsed() >= tick_rate {
             app.signal.on_tick();
+            app.canvas.on_tick();
             last_tick = Instant::now();
         }
         

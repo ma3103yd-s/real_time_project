@@ -32,10 +32,12 @@ use regul::{Regul, ReferenceGenerator};
 use mode:: {Mode, ModeMonitor};
 use pid::{PIDparam, PID};
 use ref_mode::{RefMode, RefModeMonitor};
-use ui::{App, run};
+use ui::{App, run, BeamCanvas};
 
 pub fn main() {
     let (tx, rx) = mpsc::channel(); // Channel to send data;
+    let (tx_pos, rx_pos) = mpsc::channel();
+    let(tx_angle, rx_angle) = mpsc::channel();
     //let gui_receiver = rx.clone();
     let inner = Arc::new(RwLock::new(PID::new()));
     let outer_param = PID::new().with_parameters(PIDparam::new(-0.1, 15.0, 1.5, 10.0, 10.0, 1.0, 0.02, true));
@@ -76,12 +78,14 @@ pub fn main() {
 
     let handler = regul_thread.spawn(move || {
         let mut regul = Regul::new(outer,
-        regul_mode, inner, regul_ref_mode, tx);
+        regul_mode, inner, regul_ref_mode, tx, tx_pos, tx_angle);
         regul.run();
     }).unwrap();
     let ui_handler = ui_thread.spawn(move || {
-       let mut app = App::new(outer_ui, ref_gen_ui, mode_ui, ref_mon_ui, rx, 100);
-       run(app).unwrap();
+        let canvas = BeamCanvas::new(rx_angle, rx_pos, 100.0);
+        let mut app = App::new(outer_ui, ref_gen_ui, mode_ui,
+            ref_mon_ui, rx, 100, canvas);
+        run(app).unwrap();
     }).unwrap();
 
     ui_handler.join().unwrap();

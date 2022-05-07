@@ -197,6 +197,8 @@ pub struct Regul {
     analog_angle: AnalogChannel,
     analog_out: AnalogChannel,
     tx: mpsc::Sender<f64>,
+    tx_pos: mpsc::Sender<f32>,
+    tx_angle: mpsc::Sender<f32>,
 }
 
 
@@ -215,7 +217,7 @@ impl Regul {
 
     pub fn new(outer: Arc<RwLock<PID>>, mode: Arc<(Mutex<Mode>, Condvar)>,
                inner: Arc<RwLock<PID>>,ref_gen: Arc<RwLock<ReferenceGenerator>>,
-               tx: mpsc::Sender<f64>)
+               tx: mpsc::Sender<f64>, tx_pos: mpsc::Sender<f32>, tx_angle: mpsc::Sender<f32>)
         -> Self {
         let it = ComediDevice::init_device().unwrap();
 
@@ -237,6 +239,8 @@ impl Regul {
             analog_angle,
             analog_out,
             tx,
+            tx_pos,
+            tx_angle,
         }
 
     }
@@ -290,6 +294,8 @@ impl Regul {
                         //println!("Value written is {}", w_val);
                         inner.update_state(u);
                         self.tx.send(u as f64).ok();
+                        self.tx_angle.send(y).ok();
+                        self.tx_pos.send(0.0).ok();
 
 
 
@@ -327,6 +333,8 @@ impl Regul {
                         inner.update_state(uI-uFF);
                         self.analog_out.write(uI);
                         self.tx.send(uI as f64).ok();
+                        self.tx_pos.send(y0).ok();
+                        self.tx_angle.send(yI).ok();
 
                             //analog_ref.set(refGen.getRef());
 
