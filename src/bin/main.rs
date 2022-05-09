@@ -51,7 +51,7 @@ pub fn main() {
     let mut inner = 
         Arc::new(RwLock::new(PID::new().with_parameters(inner_param)));
 
-    let outer = Arc::new(RwLock::new(PID::new()));
+    //let outer = Arc::new(RwLock::new(PID::new()));
     let ref_mon = RefModeMonitor::new(RefMode::OPTIMAL);
     let ref_mon_ui = Arc::clone(ref_mon.get_ref());
 

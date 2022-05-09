@@ -289,6 +289,7 @@ impl Regul {
                         //let mut inner = &mut (*self.inner).write().unwrap();
                         let u = limit(inner.calculate_output(y, yRef));
                         //println!("y is {}", y);
+                        //println!("yRef is {}", yRef);
                         //println!("u is {}", u);
                         let w_val = self.analog_out.write(u).unwrap();
                         //println!("Value written is {}", w_val);
@@ -303,8 +304,10 @@ impl Regul {
 
                     Mode::BALL => {
         
-                        let y0 = self.analog_pos.read().unwrap();
+                        let mut y0 = self.analog_pos.read().unwrap();
                         let yref = ref_gen.get_ref();
+                        //Constant added cause of measurement error
+                        y0 += 0.4;
                         let phiFF = ref_gen.get_phiff();
                         let uFF = ref_gen.get_uff();
 
@@ -327,7 +330,7 @@ impl Regul {
                         let vI = inner.calculate_output(yI, uO) + uFF;
                         let uI = limit(vI);
                         is_sat = uI == UMIN || uI == UMAX;
-                        //println!("pos is {}", y0);
+                       // println!("pos is {}", y0);
                         //println!("u is {}", uI);
                         //println!("yref is {}", yref);
                         inner.update_state(uI-uFF);
@@ -347,6 +350,8 @@ impl Regul {
 
             if let Ok(duration) = duration {
                 //println!("Duration is {:?}", duration);
+                 //cool_time_tracker += duration.as_secs_f64();
+                //println!("{:?}", cool_time_tracker);
                 thread::sleep(duration);
             }
 

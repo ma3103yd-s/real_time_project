@@ -92,8 +92,8 @@ impl BeamCanvas {
         let line_4 = Line {
             x1: coords[3].0,
             y1: coords[3].1,
-            x2: coords[4].0,
-            y2: coords[4].1,
+            x2: coords[1].0,
+            y2: coords[1].1,
             color: Color::White,
 
         };
@@ -173,9 +173,10 @@ impl App<ControllerSignal> {
         let amp = (*ref_gen_lock).get_amp();
         let controller_data = ControllerData::new(sampling_time, amp);
         let controller_signal = ControllerSignal::new(recv, sampling_time);
-        let nbr_points = (tick_rate as f32/ sampling_time) as usize;
+        let nbr_points = (tick_rate as f32/sampling_time) as usize;
         let points = vec![(0.0, 0.0);nbr_points];
-        let right_window = tick_rate as f64;
+        //let right_window = tick_rate as f64 / 1000.0;
+        let right_window = tick_rate as f64 / 1000.0+1.0 as f64;
         drop(regul_lock);
         drop(ref_gen_lock);
         let signal = PlotSignal::new(
@@ -183,7 +184,7 @@ impl App<ControllerSignal> {
             points,
             tick_rate,
             (sampling_time*1000.0) as usize,
-            [0.0, right_window],
+            [-5.0, right_window],
 
         );
 
@@ -274,12 +275,15 @@ impl<S> PlotSignal<S> where S:Iterator {
     fn on_tick(&mut self) {
 
         let data_length = self.points.len();
+        let window_size = self.window[1]-self.window[0];
+        
+        
         for _ in 0.. data_length {
-            self.points.remove(0);
+            //self.points.remove(0);
         }
         self.points.extend(self.data_source.by_ref().take(data_length));
-        self.window[0] += data_length as f64 * (self.sample_rate as f64 / 1000.0);
-        self.window[1] += data_length as f64 * (self.sample_rate as f64 / 1000.0);
+        self.window[0] +=  (self.tick_rate as f64 / 1000.0);
+        self.window[1] += (self.tick_rate as f64 / 1000.0);
 //self.sample_rate as f64 / 1000.0;
     }
 
@@ -610,7 +614,6 @@ fn draw_chart<B: Backend, S: Iterator<Item = (f64, f64)>>(
         .style(Style::default().fg(Color::Cyan))
         .graph_type(GraphType::Line)
         .data(&signal.points)];
-    
 
     let x_labels = vec![
     Span::styled(
@@ -623,7 +626,7 @@ fn draw_chart<B: Backend, S: Iterator<Item = (f64, f64)>>(
         Style::default().add_modifier(Modifier::BOLD),
     ),
     ];
-
+    //println!("{:?}", signal.points);
     let chart = Chart::new(dataset)
         .block(
             Block::default()
@@ -640,17 +643,18 @@ fn draw_chart<B: Backend, S: Iterator<Item = (f64, f64)>>(
                 .title("X Axis")
                 .style(Style::default().fg(Color::Gray))
                 .labels(x_labels)
-                .bounds(signal.window)
+                //.bounds(signal.window)
+                .bounds([signal.window[0], signal.window[1]]),
         )
         .y_axis(
             Axis::default()
                 .title("Y Axis")
                 .style(Style::default().fg(Color::Gray))
-                .bounds([0.0, 1.0])
+                .bounds([-11.0, 11.0])
                 .labels(vec![
-                    Span::styled("0", Style::default().add_modifier(Modifier::BOLD)),
-                    Span::raw("0.5"),
-                    Span::styled("1.0", Style::default().add_modifier(Modifier::BOLD)),
+                    Span::styled("-10.0", Style::default().add_modifier(Modifier::BOLD)),
+                    Span::raw("0.0"),
+                    Span::styled("10.0", Style::default().add_modifier(Modifier::BOLD)),
                 ]),
         );
     f.render_widget(chart, area);
