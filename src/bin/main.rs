@@ -51,7 +51,7 @@ pub fn main() {
     let mut inner = 
         Arc::new(RwLock::new(PID::new().with_parameters(inner_param)));
 
-    let outer = Arc::new(RwLock::new(PID::new()));
+    //let outer = Arc::new(RwLock::new(PID::new()));
     let ref_mon = RefModeMonitor::new(RefMode::OPTIMAL);
     let ref_mon_ui = Arc::clone(ref_mon.get_ref());
 
@@ -82,9 +82,9 @@ pub fn main() {
         regul.run();
     }).unwrap();
     let ui_handler = ui_thread.spawn(move || {
-        let canvas = BeamCanvas::new(rx_angle, rx_pos, 100.0);
+        let canvas = BeamCanvas::new(rx_angle, rx_pos, 3800.0);
         let mut app = App::new(outer_ui, ref_gen_ui, mode_ui,
-            ref_mon_ui, rx, 100, canvas);
+            ref_mon_ui, rx, 250, canvas);
         run(app).unwrap();
     }).unwrap();
 
