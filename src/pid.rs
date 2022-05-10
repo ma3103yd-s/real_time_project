@@ -66,8 +66,9 @@ impl PID{
     pub fn calculate_output(&mut self, y: f32, yref: f32) -> f32 {
         self.ynew = y;
         self.e = yref - y;
-        self.D = self.ad*self.D - self.bd*(self.e - self.eold);
-        self.v = self.p.K*(self.p.Beta*yref - y) + self.I + self.D;     
+        self.D = self.ad*self.D + self.bd*(self.e - self.eold);
+        self.v = self.p.K*(self.p.Beta*yref - y) + self.I + self.D;
+        self.eold = self.e;
         return self.v;
     }
 

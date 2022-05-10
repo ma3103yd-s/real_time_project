@@ -3,16 +3,21 @@ extern crate crossterm;
 extern crate tui;
 
 const MAX_AMP: f32 = 5.0;
+const WIDTH: f64 = 200.0;
 use rand::random;
 use std::{io, thread::{self, }, time::{Duration, Instant}, sync::{Mutex, Condvar, mpsc::TryIter}, os::unix::prelude::MetadataExt};
 use std::error::Error;
+use std::io::Write;
+use std::fs::File;
+use std::f32::consts::PI;
+
 use tui::{
     Frame,
     text::{Span, Spans},
     style::{Color,Style, Modifier},
     backend::{Backend, CrosstermBackend},
     widgets::{Widget, Block, Borders, Cell,
-        Row, Table, TableState, Axis, List, ListItem, ListState, GraphType, Dataset, Chart, LineGauge, Gauge, canvas::{Rectangle, Line, Canvas, Map, MapResolution}},
+        Row, Table, TableState, Axis, List, ListItem, ListState, GraphType, Dataset, Chart, LineGauge, Gauge, canvas::{Rectangle, Line, Canvas, Map, MapResolution}, Tabs},
     layout::{Rect, Layout, Constraint, Direction},
     Terminal, symbols
 };
@@ -44,14 +49,14 @@ impl BeamCanvas {
     pub fn new(angle_recv: mpsc::Receiver<f32>,
         pos_recv: mpsc::Receiver<f32>, length: f64) -> Self {
             let coords = [
-                (-0.5*length, -10.0),
-                (-0.5*length, 10.0),
-                (0.5*length, -10.0),
-                (0.5*length, 10.0),
+                (-0.5*length, -0.5*WIDTH),
+                (0.5*length, -0.5*WIDTH),
+                (0.5*length, 0.5*WIDTH),
+                (-0.5*length, 0.5*WIDTH),
                 ];
-            let shapes = Self::to_shapes(coords, (0.0, 0.0));
+            let shapes = Self::to_shapes(coords, (0.0, 0.5*WIDTH));
             Self {
-                ball_pos: (0.0, 0.0),
+                ball_pos: (0.0, WIDTH*0.5),
                 beam_angle: 0.0,
                 angle_recv,
                 pos_recv,
@@ -71,15 +76,16 @@ impl BeamCanvas {
             y2: coords[1].1,
             color: Color::White,
         };
+         
         let line_2 = Line {
-            x1: coords[0].0,
-            y1: coords[0].1,
+            x1: coords[1].0,
+            y1: coords[1].1,
             x2: coords[2].0,
             y2: coords[2].1,
             color: Color::White,
 
         };
-
+        
         let line_3 = Line {
             x1: coords[2].0,
             y1: coords[2].1,
@@ -92,8 +98,8 @@ impl BeamCanvas {
         let line_4 = Line {
             x1: coords[3].0,
             y1: coords[3].1,
-            x2: coords[4].0,
-            y2: coords[4].1,
+            x2: coords[0].0,
+            y2: coords[0].1,
             color: Color::White,
 
         };
@@ -101,33 +107,40 @@ impl BeamCanvas {
         let rect= Rectangle {
             x: ball_pos.0 as f64,
             y: ball_pos.1 as f64,
-            width: 2.0,
-            height: 2.0,
-            color: Color::White,
+            width: 50.0,
+            height: 50.0,
+            color: Color::Yellow,
 
         };
-
+        //(vec![line_1, line_3], rect)
         (vec![line_1, line_2, line_3, line_4], rect)
     }
 
     pub fn on_tick(&mut self) {
-        let new_pos = self.pos_recv.recv().unwrap();
-        let new_angle = self.angle_recv.recv().unwrap();
+        let new_pos = self.pos_recv.
+        try_iter().last().unwrap() as f64;
+        let new_angle = self.angle_recv.try_iter()
+        .last().unwrap();
         self.beam_angle = new_angle;
         self.to_beam();
-        let ball_pos = (new_pos.cos() as f64, new_pos.sin() as f64);
+        let dx = -WIDTH*(self.beam_angle/PI*0.5).sin() as f64 * 0.5;
+        let dy = WIDTH*(self.beam_angle/PI*0.5).cos() as f64 * 0.5;
+        let ball_pos = ((new_pos*(self.length/10.0))*(new_angle as f64/PI as f64*0.5).cos(),
+        (new_pos*(self.length/10.0)) * (new_angle as f64/PI as f64*0.5).sin() + dy);
         self.ball_pos = ball_pos;
         self.shapes = Self::to_shapes(self.coords, self.ball_pos);
 
     }
 
     fn to_beam(&mut self) {
-        let new_x = self.length*self.beam_angle.cos() as f64;
-        let new_y = self.length*self.beam_angle.sin() as f64;
-        self.coords[0] = (-new_x, -new_y);
-        self.coords[1] = (-new_x, new_y);
-        self.coords[2] = (new_x, -new_y);
-        self.coords[3] = (new_x, new_y);
+        let new_x = self.length*(self.beam_angle/PI*0.5).cos() as f64;
+        let dx = WIDTH*(self.beam_angle/PI*0.5).sin() as f64 * 0.5;
+        let dy = WIDTH*(self.beam_angle/PI*0.5).cos() as f64 * 0.5;
+        let new_y = self.length*(self.beam_angle/PI*0.5).sin() as f64;
+        self.coords[0] = (-0.5*new_x+dx, -0.5*new_y-dy);
+        self.coords[1] = (0.5*new_x+dx, 0.5*new_y-dy);
+        self.coords[2] = (0.5*new_x-dx, 0.5*new_y+dy);
+        self.coords[3] = (-0.5*new_x-dx, -0.5*new_y+dy);
    
     }
 }
@@ -172,17 +185,27 @@ impl App<ControllerSignal> {
         let sampling_time = pid_params.H;
         let amp = (*ref_gen_lock).get_amp();
         let controller_data = ControllerData::new(sampling_time, amp);
-        let controller_signal = ControllerSignal::new(recv, sampling_time);
-        let nbr_points = (tick_rate as f32/ sampling_time) as usize;
-        let points = vec![(0.0, 0.0);nbr_points];
-        let right_window = tick_rate as f64;
+
+        let sampling_time_ms = sampling_time*1000.0;
+        let nbr_points = (tick_rate as f32/ sampling_time_ms) as usize;
+        let controller_signal = ControllerSignal::new(recv, sampling_time,
+                                                      nbr_points as f64*sampling_time as f64);
+        //let points = vec![(0.0, 0.0);nbr_points];
+        let points: Vec<(f64, f64)> = (0..nbr_points)
+            .map(|x| (x as f64 * sampling_time as f64, 0.0)).collect();
+        //let points: Vec<(f64, f64)> = Vec::new();
+        let mut fs = File::create("output.txt").unwrap();
+        fs.write(format!("{}", nbr_points).as_bytes());
+
+
+        let right_window = tick_rate as f64 / 1000.0;
         drop(regul_lock);
         drop(ref_gen_lock);
         let signal = PlotSignal::new(
             controller_signal,
             points,
             tick_rate,
-            (sampling_time*1000.0) as usize,
+            sampling_time_ms as usize,
             [0.0, right_window],
 
         );
@@ -225,11 +248,11 @@ pub struct ControllerSignal {
 
 impl ControllerSignal {
 
-    pub fn new(data: mpsc::Receiver<f64>, sample_time: f32) -> Self {
+    pub fn new(data: mpsc::Receiver<f64>, sample_time: f32, time: f64) -> Self {
         Self {
             data,
             sample_time,
-            time: 0.0,
+            time,
         }
     }
 
@@ -241,7 +264,8 @@ impl Iterator for ControllerSignal {
        let ts = self.sample_time;
        let t = self.time+ts as f64;
        self.time = t;
-       self.data.try_iter().map(|v| (t, v)).next()
+       self.data.try_recv().ok().map(|v| (t, v))
+       //self.data.try_iter().map(|v| (t, v)).next()
     }
     
 }
@@ -273,11 +297,25 @@ pub struct PlotSignal<S: Iterator> {
 impl<S> PlotSignal<S> where S:Iterator {
     fn on_tick(&mut self) {
 
-        let data_length = self.points.len();
-        for _ in 0.. data_length {
+        let mut data_length = self.points.len();
+        for _ in 0..data_length {
             self.points.remove(0);
         }
         self.points.extend(self.data_source.by_ref().take(data_length));
+        //let mut fs = File::create("output.txt").unwrap();
+        //fs.write(format!("{}", data_length).as_bytes());
+
+        //println!("{:?}", self.points.len());
+        /*if data_length == 0 {
+            self.points.extend(self.data_source.by_ref());
+            data_length = self.points.len();
+        } else {
+            for _ in 0.. data_length {
+                self.points.remove(0);
+            }
+            self.points.extend(self.data_source.by_ref().take(data_length));
+        }*/
+
         self.window[0] += data_length as f64 * (self.sample_rate as f64 / 1000.0);
         self.window[1] += data_length as f64 * (self.sample_rate as f64 / 1000.0);
 //self.sample_rate as f64 / 1000.0;
@@ -646,11 +684,11 @@ fn draw_chart<B: Backend, S: Iterator<Item = (f64, f64)>>(
             Axis::default()
                 .title("Y Axis")
                 .style(Style::default().fg(Color::Gray))
-                .bounds([0.0, 1.0])
+                .bounds([-5.0, 5.0])
                 .labels(vec![
-                    Span::styled("0", Style::default().add_modifier(Modifier::BOLD)),
-                    Span::raw("0.5"),
-                    Span::styled("1.0", Style::default().add_modifier(Modifier::BOLD)),
+                    Span::styled("-5.0", Style::default().add_modifier(Modifier::BOLD)),
+                    Span::raw("0.0"),
+                    Span::styled("5.0", Style::default().add_modifier(Modifier::BOLD)),
                 ]),
         );
     f.render_widget(chart, area);
@@ -775,17 +813,18 @@ fn draw_first_tab<B, S>(f: &mut Frame<B>, app: &mut App<S>, area: Rect)
 
 fn draw_second_tab<B, S>(f: &mut Frame<B>, app: &mut App<S>, area: Rect)
 where B: Backend, S: Iterator
-{
+{   
     let c = Canvas::default()
     .block(Block::default().title("Beam").borders(Borders::ALL))
-    .x_bounds([-70.0, 70.0])
-    .y_bounds([-50.0, 50.0])
+    .x_bounds([-2000.0, 2000.0])
+    .y_bounds([-2000.0, 2000.0])
+    .marker(symbols::Marker::Braille)
     .paint(|ctx| {
-        ctx.draw(&Map {
+        /*ctx.draw(&Map {
             resolution: MapResolution::High,
             color: Color::Black,
-        });
-        ctx.layer();
+        });*/
+        //ctx.layer();
         for line in app.canvas.shapes.0.iter() {
             ctx.draw(line);
         }
@@ -800,7 +839,33 @@ fn ui<B, S>(f: &mut Frame<B>, app: &mut App<S>)
 where B: Backend,
       S: Iterator<Item = (f64, f64)>
 {
-    let main_chunks = Layout::default()
+
+    let chunks = Layout::default()
+        .constraints([Constraint::Length(3), Constraint::Min(0)].as_ref())
+        .split(f.size());
+    let titles = ["Controller", "Ball and beam"].iter()
+        .map(|s| Spans::from(Span::styled(*s, Style::default().fg(Color::Blue))))
+        .collect();
+
+    let tabs = Tabs::new(titles)
+        .block(Block::default().borders(Borders::ALL).title("UI"))
+        .highlight_style(Style::default().fg(Color::Yellow));
+    match app.index {
+        TabIndex::First => {
+            let tabs = tabs.select(0);
+            f.render_widget(tabs, chunks[0]);
+            draw_first_tab(f, app, chunks[1]);
+        },
+        TabIndex::Second =>  {
+            let tabs = tabs.select(1);
+            f.render_widget(tabs, chunks[0]);
+            draw_second_tab(f, app, chunks[1]);
+           
+        },
+    }
+
+
+   /*  let main_chunks = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([Constraint::Percentage(30), Constraint::Min(0)].as_ref())
         .split(f.size());
@@ -834,7 +899,7 @@ where B: Backend,
         },
         InputMode::Quit => {},
         
-    }
+    }*/
     
 }
 
