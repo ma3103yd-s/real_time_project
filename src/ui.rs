@@ -76,7 +76,6 @@ impl BeamCanvas {
             y2: coords[1].1,
             color: Color::White,
         };
-         
         let line_2 = Line {
             x1: coords[1].0,
             y1: coords[1].1,
@@ -112,7 +111,7 @@ impl BeamCanvas {
             color: Color::Yellow,
 
         };
-        //(vec![line_1, line_3], rect)
+
         (vec![line_1, line_2, line_3, line_4], rect)
     }
 

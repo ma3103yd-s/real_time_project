@@ -32,7 +32,6 @@ impl PIDparam {
 pub struct PID{
     p: PIDparam,
     v: f32, 
-    ynew: f32, 
     yold: f32,
     eold: f32,
     e: f32,
@@ -44,11 +43,10 @@ pub struct PID{
 
 impl PID{
     pub fn new() -> Self {
-        let p = PIDparam::new(-0.1, 0.0, 0.5, 1.0, 5.0, 1.0, 0.1, false);
+        let p = PIDparam::new(0.0, 0.0, 0.5, 1.0, 5.0, 1.0, 0.1, false);
         let mut temp  = Self {
             p,
             v: 0.0,
-            ynew: 0.0,
             yold: 0.0,
             eold: 0.0,
             e: 0.0,
@@ -64,7 +62,6 @@ impl PID{
     }
 
     pub fn calculate_output(&mut self, y: f32, yref: f32) -> f32 {
-        self.ynew = y;
         self.e = yref - y;
         self.D = self.ad*self.D + self.bd*(self.e - self.eold);
         self.v = self.p.K*(self.p.Beta*yref - y) + self.I + self.D;

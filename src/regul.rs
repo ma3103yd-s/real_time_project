@@ -282,7 +282,6 @@ impl Regul {
                     Mode::BEAM => {
                         let y = self.analog_angle.read().unwrap(); // Handle result later
 
-                        //println!("yref is {}", y);
                         let yRef = ref_gen.get_ref();
                         //println!("yref is {}", yRef);
 
@@ -330,7 +329,7 @@ impl Regul {
                         is_sat = uI == UMIN || uI == UMAX;
                         //println!("pos is {}", y0);
                         //println!("u is {}", uI);
-                        //println!("yref is {}", yI);
+                        //println!("yref is {}", yref);
                         inner.update_state(uI-uFF);
                         self.analog_out.write(uI);
                         self.tx.send(uI as f64).ok();
