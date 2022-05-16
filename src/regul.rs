@@ -196,7 +196,8 @@ pub struct Regul {
     analog_pos: AnalogChannel,
     analog_angle: AnalogChannel,
     analog_out: AnalogChannel,
-    tx: mpsc::Sender<f64>,
+    tx_u: mpsc::Sender<f64>,
+    tx_y: mpsc::Sender<f64>,
     tx_pos: mpsc::Sender<f32>,
     tx_angle: mpsc::Sender<f32>,
 }
@@ -217,7 +218,8 @@ impl Regul {
 
     pub fn new(outer: Arc<RwLock<PID>>, mode: Arc<(Mutex<Mode>, Condvar)>,
                inner: Arc<RwLock<PID>>,ref_gen: Arc<RwLock<ReferenceGenerator>>,
-               tx: mpsc::Sender<f64>, tx_pos: mpsc::Sender<f32>, tx_angle: mpsc::Sender<f32>)
+               tx_u: mpsc::Sender<f64>, tx_y: mpsc::Sender<f64>,
+               tx_pos: mpsc::Sender<f32>, tx_angle: mpsc::Sender<f32>)
         -> Self {
         let it = ComediDevice::init_device().unwrap();
 
@@ -238,7 +240,8 @@ impl Regul {
             analog_pos,
             analog_angle,
             analog_out,
-            tx,
+            tx_u,
+            tx_y,
             tx_pos,
             tx_angle,
         }
@@ -272,6 +275,8 @@ impl Regul {
                 ref_gen.run();
                 match *mode_change {
                     Mode::OFF => {
+                        outer.reset();
+                        inner.reset();
                         self.analog_out.write(0.0);
                         while *mode_change == Mode::OFF {
                             mode_change = cvar.wait(mode_change).unwrap();
@@ -280,6 +285,8 @@ impl Regul {
                     },
 
                     Mode::BEAM => {
+                        inner.reset();
+                        outer.reset();
                         let y = self.analog_angle.read().unwrap(); // Handle result later
 
                         let yRef = ref_gen.get_ref();
@@ -293,7 +300,8 @@ impl Regul {
                         let w_val = self.analog_out.write(u).unwrap();
                         //println!("Value written is {}", w_val);
                         inner.update_state(u);
-                        self.tx.send(y as f64).ok();
+                        self.tx_y.send(y as f64).ok();
+                        self.tx_u.send(u as f64).ok();
                         self.tx_angle.send(y).ok();
                         self.tx_pos.send(0.0).ok();
 
@@ -302,7 +310,6 @@ impl Regul {
                     },
 
                     Mode::BALL => {
-        
                         let y0 = self.analog_pos.read().unwrap()+0.3;
                         let yref = ref_gen.get_ref();
                         let phiFF = ref_gen.get_phiff();
@@ -310,6 +317,7 @@ impl Regul {
 
                         let yI = self.analog_angle.read().unwrap();
 
+                        //println!("y0 is {}", y0);
                         //Synchronize Outer
 
                         let vO = outer.calculate_output(y0, yref) + phiFF;
@@ -332,7 +340,8 @@ impl Regul {
                         //println!("yref is {}", yref);
                         inner.update_state(uI-uFF);
                         self.analog_out.write(uI);
-                        self.tx.send(uI as f64).ok();
+                        self.tx_u.send(uI as f64).ok();
+                        self.tx_y.send(y0 as f64).ok();
                         self.tx_pos.send(y0).ok();
                         self.tx_angle.send(yI).ok();
 

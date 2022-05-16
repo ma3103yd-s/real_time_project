@@ -4,6 +4,7 @@ extern crate tui;
 
 const MAX_AMP: f32 = 5.0;
 const WIDTH: f64 = 200.0;
+const TIME_LENGTH: usize = 10_000;
 use rand::random;
 use std::{io, thread::{self, }, time::{Duration, Instant}, sync::{Mutex, Condvar, mpsc::TryIter}, os::unix::prelude::MetadataExt};
 use std::error::Error;
@@ -117,9 +118,9 @@ impl BeamCanvas {
 
     pub fn on_tick(&mut self) {
         let new_pos = self.pos_recv.
-        try_iter().last().unwrap() as f64;
+        try_iter().last().unwrap_or(0.0) as f64;
         let new_angle = self.angle_recv.try_iter()
-        .last().unwrap();
+        .last().unwrap_or(0.0);
         self.beam_angle = new_angle;
         self.to_beam();
         let dx = -WIDTH*(self.beam_angle/PI*0.5).sin() as f64 * 0.5;
@@ -160,48 +161,66 @@ impl TabIndex {
 }
 
 pub struct App<S: Iterator> {
-    regul: Arc<RwLock<PID>>,
+    outer: Arc<RwLock<PID>>,
+    inner: Arc<RwLock<PID>>,
     ref_gen: Arc<RwLock<ReferenceGenerator>>,
     controller_data: ControllerData,
-    params: ParameterData,
+    outer_params: ParameterData,
+    inner_params: ParameterData,
     mode: ModeData,
     ref_mode: RefModeData,
     input_mode: InputMode,
     selection: SelectionMode,
-    signal: PlotSignal<S>,
+    control_signal: PlotSignal<S>,
+    measurement_signal: PlotSignal<S>,
     reference_area: Option<Rect>,
     canvas: BeamCanvas,
     index: TabIndex,
+    par_index: TabIndex,
+    chart_index: TabIndex,
 }
 
 impl App<ControllerSignal> {
-    pub fn new(regul: Arc<RwLock<PID>>, ref_gen: Arc<RwLock<ReferenceGenerator>>,
+    pub fn new(outer: Arc<RwLock<PID>>, inner: Arc<RwLock<PID>>, ref_gen: Arc<RwLock<ReferenceGenerator>>,
         mode: Arc<(Mutex<Mode>, Condvar)>, ref_mode: Arc<(Mutex<RefMode>, Condvar)>, 
-        recv: mpsc::Receiver<f64>, tick_rate: usize, canvas: BeamCanvas) -> Self {
-        let regul_lock = (*regul).read().unwrap();
+        recv_1: mpsc::Receiver<f64>, recv_2: mpsc::Receiver<f64>, tick_rate: usize, canvas: BeamCanvas) -> Self {
+        let regul_lock = (*outer).read().unwrap();
+        let inner_regul_lock = (*inner).read().unwrap();
         let ref_gen_lock = (*ref_gen).read().unwrap();
-        let pid_params = (*regul_lock).get_params();
-        let sampling_time = pid_params.H;
+        let outer_params = (*regul_lock).get_params();
+        let inner_params = (*inner_regul_lock).get_params();
+        let sampling_time = inner_params.H;
         let amp = (*ref_gen_lock).get_amp();
         let controller_data = ControllerData::new(sampling_time, amp);
 
         let sampling_time_ms = sampling_time*1000.0;
         let nbr_points = (tick_rate as f32/ sampling_time_ms) as usize;
-        let controller_signal = ControllerSignal::new(recv, sampling_time,
+        let controller_signal = ControllerSignal::new(recv_1, sampling_time,
+                                                      nbr_points as f64*sampling_time as f64);
+        let measurement_signal = ControllerSignal::new(recv_2, sampling_time,
                                                       nbr_points as f64*sampling_time as f64);
         //let points = vec![(0.0, 0.0);nbr_points];
-        let points: Vec<(f64, f64)> = (0..nbr_points)
-            .map(|x| (x as f64 * sampling_time as f64, 0.0)).collect();
+        let points: Vec<(f64, f64)> = Vec::new();
         //let points: Vec<(f64, f64)> = Vec::new();
         let mut fs = File::create("output.txt").unwrap();
         fs.write(format!("{}", nbr_points).as_bytes());
 
 
-        let right_window = tick_rate as f64 / 1000.0;
+        let right_window = 0.0;//TIME_LENGTH as f64 / 1000.0;
+        //let right_window = (tick_rate as f64 / 1000.0);
         drop(regul_lock);
         drop(ref_gen_lock);
-        let signal = PlotSignal::new(
+        drop(inner_regul_lock);
+        let control_signal = PlotSignal::new(
             controller_signal,
+            points.clone(),
+            tick_rate,
+            sampling_time_ms as usize,
+            [ 0.0, right_window],
+
+        );
+        let measurement_signal = PlotSignal::new(
+            measurement_signal,
             points,
             tick_rate,
             sampling_time_ms as usize,
@@ -209,24 +228,30 @@ impl App<ControllerSignal> {
 
         );
 
-        let params = ParameterData::new(pid_params);
+        let outer_params = ParameterData::new(outer_params);
+        let inner_params = ParameterData::new(inner_params);
         let mode = ModeData::new(mode);
         let ref_mode = RefModeData::new(ref_mode);
         let input_mode = InputMode::Normal;
         let selection = SelectionMode::Parameters;
         Self {
-            regul,
+            outer,
+            inner,
             ref_gen,
             controller_data,
-            params,
+            outer_params,
+            inner_params,
             mode,
             ref_mode,
             input_mode,
             selection,
-            signal,
+            control_signal,
+            measurement_signal,
             reference_area: None,
             canvas,
             index: TabIndex::First,
+            par_index: TabIndex::First,
+            chart_index: TabIndex::First,
         }
 
     }
@@ -295,12 +320,32 @@ pub struct PlotSignal<S: Iterator> {
 
 impl<S> PlotSignal<S> where S:Iterator {
     fn on_tick(&mut self) {
+         
+        let old_length = self.points.len();
+        let time_data_length = TIME_LENGTH / self.sample_rate;
+        self.points.extend(self.data_source.by_ref());        
+        let data_length = self.points.len();
+        let l = data_length.checked_sub(time_data_length).unwrap_or(0);
+        //println!("length is {}", l);
+        let diff = data_length-old_length;
+        self.points.drain(0..l);
+        
+        /*
+        let length = self.points.len();
 
-        let mut data_length = self.points.len();
-        for _ in 0..data_length {
-            self.points.remove(0);
-        }
-        self.points.extend(self.data_source.by_ref().take(data_length));
+        self.points.extend(self.data_source.by_ref());
+        let diff = self.points.len()-length;
+        if length != 0 {
+            for _ in 0..diff {
+                self.points.remove(0);
+            }
+            self.window[0] += (diff+1) as f64 * (self.sample_rate as f64 / 1000.0);
+            self.window[1] += (diff+1) as f64 * (self.sample_rate as f64 / 1000.0);
+        } */
+        //println!("length is {}", length);
+
+            
+
         //let mut fs = File::create("output.txt").unwrap();
         //fs.write(format!("{}", data_length).as_bytes());
 
@@ -315,8 +360,9 @@ impl<S> PlotSignal<S> where S:Iterator {
             self.points.extend(self.data_source.by_ref().take(data_length));
         }*/
 
-        self.window[0] += data_length as f64 * (self.sample_rate as f64 / 1000.0);
-        self.window[1] += data_length as f64 * (self.sample_rate as f64 / 1000.0);
+        self.window[1] += (diff+1) as f64 * (self.sample_rate as f64 / 1000.0);
+        self.window[0]  = self.window[1]-self.points.len() as f64*(self.sample_rate as f64 / 1000.0);
+
 //self.sample_rate as f64 / 1000.0;
     }
 
@@ -642,7 +688,7 @@ where B: Backend, S: Iterator
 fn draw_chart<B: Backend, S: Iterator<Item = (f64, f64)>>(
     f: &mut Frame<B>, signal: &mut PlotSignal<S>, area: Rect) {
     let dataset = vec![Dataset::default()
-        .name("Control signal")
+        .name("Signal")
         .marker(symbols::Marker::Braille)
         .style(Style::default().fg(Color::Cyan))
         .graph_type(GraphType::Line)
@@ -665,7 +711,7 @@ fn draw_chart<B: Backend, S: Iterator<Item = (f64, f64)>>(
         .block(
             Block::default()
                 .title(Span::styled(
-                    "Control signal",
+                    "Real Time Plot",
                     Style::default()
                         .fg(Color::Cyan)
                         .add_modifier(Modifier::BOLD),
@@ -674,14 +720,14 @@ fn draw_chart<B: Backend, S: Iterator<Item = (f64, f64)>>(
         )
         .x_axis(
             Axis::default()
-                .title("X Axis")
+                .title("Time / s")
                 .style(Style::default().fg(Color::Gray))
                 .labels(x_labels)
                 .bounds(signal.window)
         )
         .y_axis(
             Axis::default()
-                .title("Y Axis")
+                .title("y axis")
                 .style(Style::default().fg(Color::Gray))
                 .bounds([-5.0, 5.0])
                 .labels(vec![
@@ -714,16 +760,12 @@ where B: Backend
 }
 
 
-fn draw_parameter_table<B>(f: &mut Frame<B>, params: &mut ParameterData, control_data: &mut ControllerData, area: Rect)
+fn draw_parameter_table<B>(f: &mut Frame<B>, params: &mut ParameterData, control_data: &mut ControllerData,
+    area: Rect)
 where
     B: Backend
 {
-    /*let items = vec![
-        ListItem::new("K"),
-        ListItem::new("Ti"),
-        ListItem::new("Td"),
-        ListItem::new("Beta"),
-    ];*/
+
     let items: Vec<Row> = params.items.iter().map(|i| {
         Row::new(i.to_owned())
     }).collect();
@@ -789,17 +831,76 @@ fn draw_first_tab<B, S>(f: &mut Frame<B>, app: &mut App<S>, area: Rect)
         .direction(Direction::Horizontal)
         .constraints([Constraint::Length(20), Constraint::Min(0)].as_ref())
         .split(right_chunks[0]);
-    draw_parameter_table(f, &mut app.params, &mut app.controller_data, left_chunks[1]);
+
+    let par_tab_chunks = Layout::default()
+        .constraints([Constraint::Length(3), Constraint::Min(0)].as_ref())
+        .split(left_chunks[1]);
+
+    let chart_tab_chunks = Layout::default()
+        .constraints([Constraint::Length(3), Constraint::Min(0)].as_ref())
+        .split(right_chunks[1]);
+
+    let par_titles = ["Outer", "Inner"].iter()
+        .map(|s| Spans::from(Span::styled(*s, Style::default().fg(Color::Blue))))
+        .collect();   
+    let chart_titles = ["u", "y"].iter()
+        .map(|s| Spans::from(Span::styled(*s, Style::default().fg(Color::Blue))))
+        .collect();   
+    let par_tabs = Tabs::new(par_titles)
+        .block(Block::default().borders(Borders::TOP).title("Outer/Inner"))
+        .highlight_style(Style::default().fg(Color::Green));
+
+    let chart_tabs = Tabs::new(chart_titles)
+        .block(Block::default().borders(Borders::TOP).title("Plots"))
+        .highlight_style(Style::default().fg(Color::Green));
+    match app.par_index {
+        TabIndex::First => {
+            let par_tabs = par_tabs.select(0);
+            f.render_widget(par_tabs, par_tab_chunks[0]);
+            draw_parameter_table(f, &mut app.outer_params, &mut app.controller_data, par_tab_chunks[1]);
+
+        },
+        TabIndex::Second =>  {
+            let par_tabs = par_tabs.select(1);
+            f.render_widget(par_tabs, par_tab_chunks[0]);
+            draw_parameter_table(f, &mut app.inner_params, &mut app.controller_data, par_tab_chunks[1]);
+           
+        },
+    }
+    match app.chart_index {
+        TabIndex::First => {
+            let chart_tabs = chart_tabs.select(0);
+            f.render_widget(chart_tabs, chart_tab_chunks[0]);
+            draw_chart(f, &mut app.control_signal, chart_tab_chunks[1]);
+
+
+        },
+        TabIndex::Second =>  {
+            let chart_tabs = chart_tabs.select(1);
+            f.render_widget(chart_tabs, chart_tab_chunks[0]);
+            draw_chart(f, &mut app.measurement_signal, chart_tab_chunks[1]);
+
+           
+        },
+    }
+
+
+
+    //draw_parameter_table(f, &mut app.params, &mut app.controller_data, left_chunks[1]);
     draw_mode_list(f, &mut app.mode, left_chunks[0]);
-    draw_chart(f, &mut app.signal, right_chunks[1]);
+    //draw_chart(f, &mut app.signal, right_chunks[1]);
     draw_ref_mode_list(f, &mut app.ref_mode, ref_list_chunks[0]);
     draw_reference_bar(f, app, ref_list_chunks[1]);
     match app.input_mode {
         InputMode::Normal => {},
         InputMode::Editing => {
-            if let Some(ind) = app.params.selected() {
+            let index = match app.par_index {
+                TabIndex::First => app.outer_params.selected(),
+                TabIndex::Second => app.inner_params.selected(),
+            };
+            if let Some(ind) = index {
                 f.set_cursor(
-                    left_chunks[1].left() + 20 + app.params.items[ind][1].len() as u16 + 4,
+                    left_chunks[1].left() + 20 + app.inner_params.items[ind][1].len() as u16 + 4,
                     left_chunks[1].top() + 1 + ind as u16,
                 )
             }
@@ -990,7 +1091,8 @@ fn on_key<S: Iterator>(app: &mut App<S>, key: KeyCode) {
             
             match app.selection {
                 SelectionMode::Mode => {
-                    app.params.unselect();
+                    app.inner_params.unselect();
+                    app.outer_params.unselect();
                     scroll_selectable(key, &mut app.mode);
                    if key == KeyCode::Enter {
                         if let Some(index) = app.mode.selected() {
@@ -1006,11 +1108,19 @@ fn on_key<S: Iterator>(app: &mut App<S>, key: KeyCode) {
                     app.mode.unselect();
                     if let KeyCode::Char(ch) = key {
                         if (ch == 'i') {app.input_mode = InputMode::Editing};
-                    } else {scroll_selectable(key, &mut app.params)}
+                        if (ch == 'y') { app.par_index.next()};
+                    } else {
+                        match app.par_index {
+                            TabIndex::First => scroll_selectable(key, &mut app.outer_params),
+                            TabIndex::Second => scroll_selectable(key, &mut app.inner_params),
+                        }
+                        //scroll_selectable(key, &mut app.params)
+                    }
                     
                 },
                 SelectionMode::Reference => {
                     scroll_selectable(key, &mut app.ref_mode);
+                    if key == KeyCode::Char('y') {app.chart_index.next()};
                     if let Some(index) = app.ref_mode.selected() {
                         let ref_mode = match index {
                             0 => RefMode::MANUAL,
@@ -1028,16 +1138,27 @@ fn on_key<S: Iterator>(app: &mut App<S>, key: KeyCode) {
 
         },
         InputMode::Editing => {
+            
+            let mut params = match app.par_index {
+                TabIndex::First => &mut app.inner_params,
+                TabIndex::Second => &mut app.outer_params,
+            };
             match key {
-                KeyCode::Char(ch) => app.params.add_char(ch),
+
+                KeyCode::Char(ch) => params.add_char(ch),
                 KeyCode::Enter => {
                     app.input_mode = InputMode::Normal;
-                    app.params.set_param();
-                    &(*app.regul.write().unwrap()).set_parameters(app.params.get_params());
-
+                    params.set_param();
+                    match app.par_index {
+                        TabIndex::First => &(*app.outer.write().unwrap())
+                            .set_parameters(params.get_params()),
+                        TabIndex::Second => &(*app.inner.write().unwrap())
+                            .set_parameters(params.get_params()),
+                    };
+                    //&(*app.regul.write().unwrap()).set_parameters(app.params.get_params());
                 },
-                KeyCode::Backspace => app.params.remove_char(),
-                KeyCode::Delete => app.params.remove_char(),
+                KeyCode::Backspace => params.remove_char(),
+                KeyCode::Delete => params.remove_char(),
                 _ => (),          
                 
             }
@@ -1074,7 +1195,7 @@ fn run_app<B: Backend, S: Iterator<Item = (f64, f64)>> (terminal: &mut Terminal<
             ui(f, &mut app);
 
         })?;
-        let tick_rate = Duration::from_millis(app.signal.tick_rate as u64);
+        let tick_rate = Duration::from_millis(app.control_signal.tick_rate as u64);
         let timeout = tick_rate
             .checked_sub(last_tick.elapsed())
             .unwrap_or_else(|| Duration::from_secs(0));
@@ -1085,7 +1206,8 @@ fn run_app<B: Backend, S: Iterator<Item = (f64, f64)>> (terminal: &mut Terminal<
             }
         }
         if last_tick.elapsed() >= tick_rate {
-            app.signal.on_tick();
+            app.control_signal.on_tick();
+            app.measurement_signal.on_tick();
             app.canvas.on_tick();
             last_tick = Instant::now();
         }

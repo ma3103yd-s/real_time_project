@@ -80,6 +80,10 @@ impl PID{
         self.eold = self.e;
     }
 
+    pub fn reset(&mut self) {
+        self.I = 0.0;
+    }
+
     pub fn get_sampling_time(&self) -> f32 {
         return (self.p.H * 1000.0);
     }

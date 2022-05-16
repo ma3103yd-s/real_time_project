@@ -35,7 +35,8 @@ use ref_mode::{RefMode, RefModeMonitor};
 use ui::{App, run, BeamCanvas};
 
 pub fn main() {
-    let (tx, rx) = mpsc::channel(); // Channel to send data;
+    let (tx_u, rx_u) = mpsc::channel(); // Channel to send data;
+    let (tx_y, rx_y) = mpsc::channel();
     let (tx_pos, rx_pos) = mpsc::channel();
     let(tx_angle, rx_angle) = mpsc::channel();
     //let gui_receiver = rx.clone();
@@ -78,13 +79,13 @@ pub fn main() {
 
     let handler = regul_thread.spawn(move || {
         let mut regul = Regul::new(outer,
-        regul_mode, inner, regul_ref_mode, tx, tx_pos, tx_angle);
+        regul_mode, inner, regul_ref_mode, tx_u, tx_y, tx_pos, tx_angle);
         regul.run();
     }).unwrap();
     let ui_handler = ui_thread.spawn(move || {
         let canvas = BeamCanvas::new(rx_angle, rx_pos, 3800.0);
-        let mut app = App::new(outer_ui, ref_gen_ui, mode_ui,
-            ref_mon_ui, rx, 250, canvas);
+        let mut app = App::new(outer_ui, inner_ui, ref_gen_ui, mode_ui,
+            ref_mon_ui, rx_u, rx_y, 260, canvas);
         run(app).unwrap();
     }).unwrap();
 
