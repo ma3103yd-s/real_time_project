@@ -894,14 +894,19 @@ fn draw_first_tab<B, S>(f: &mut Frame<B>, app: &mut App<S>, area: Rect)
     match app.input_mode {
         InputMode::Normal => {},
         InputMode::Editing => {
-            let index = match app.par_index {
+            let params = match app.par_index {
+                TabIndex::First => &app.outer_params,
+                TabIndex::Second => &app.inner_params,
+            };
+
+            /*let index = match app.par_index {
                 TabIndex::First => app.outer_params.selected(),
                 TabIndex::Second => app.inner_params.selected(),
-            };
-            if let Some(ind) = index {
+            };*/
+            if let Some(ind) = params.selected() {
                 f.set_cursor(
-                    left_chunks[1].left() + 20 + app.inner_params.items[ind][1].len() as u16 + 4,
-                    left_chunks[1].top() + 1 + ind as u16,
+                    par_tab_chunks[1].left() + 20 + params.items[ind][1].len() as u16 + 4,
+                    par_tab_chunks[1].top() + 1 + ind as u16,
                 )
             }
 
@@ -1140,8 +1145,8 @@ fn on_key<S: Iterator>(app: &mut App<S>, key: KeyCode) {
         InputMode::Editing => {
             
             let mut params = match app.par_index {
-                TabIndex::First => &mut app.inner_params,
-                TabIndex::Second => &mut app.outer_params,
+                TabIndex::First => &mut app.outer_params,
+                TabIndex::Second => &mut app.inner_params,
             };
             match key {
 

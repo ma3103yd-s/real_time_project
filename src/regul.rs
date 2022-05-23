@@ -107,15 +107,20 @@ impl ReferenceGenerator {
         RefMode::MANUAL => {
             //self.setpoint = 0.0;
             //self.amp = self.setpoint;
-
+            self.phiff = 0.0;
+            self.uff = 0.0;
+            self.new_setpoint =  self.amp;
+            self.setpoint = self.new_setpoint;
         },
 
-        RefMode::SQUARE => {
-            let now = SystemTime::now();
-            if  now.duration_since(self.last_time).unwrap_or(Duration::ZERO).as_secs_f32() > self.period  {
+            RefMode::SQUARE => {
+                self.phiff = 0.0;
+                self.uff = 0.0;
+                let now = SystemTime::now();
+                if  now.duration_since(self.last_time).unwrap_or(Duration::ZERO).as_secs_f32() > self.period  {
                 self.last_time = now;
                 self.sign = -self.sign;
-            }
+                }
 
             self.new_setpoint = self.sign * self.amp;
             self.setpoint = self.new_setpoint;
@@ -287,11 +292,11 @@ impl Regul {
                     Mode::BEAM => {
                         inner.reset();
                         outer.reset();
-                        let y = self.analog_angle.read().unwrap(); // Handle result later
+                        let y = self.analog_angle.read().unwrap()-0.35; // Handle result later
 
                         let yRef = ref_gen.get_ref();
                         //println!("yref is {}", yRef);
-
+                        //println!("yI is {}", y);
                         //Synchronize inner
                         //let mut inner = &mut (*self.inner).write().unwrap();
                         let u = limit(inner.calculate_output(y, yRef));
@@ -315,9 +320,9 @@ impl Regul {
                         let phiFF = ref_gen.get_phiff();
                         let uFF = ref_gen.get_uff();
 
-                        let yI = self.analog_angle.read().unwrap();
+                        let yI = self.analog_angle.read().unwrap()-0.35;
 
-                        //println!("y0 is {}", y0);
+                        //println!("yI is {}", yI);
                         //Synchronize Outer
 
                         let vO = outer.calculate_output(y0, yref) + phiFF;
